@@ -134,6 +134,62 @@ REASON: HTTP error formatting is an API-layer concern.
 CONTESTED: no
 ```
 
+```
+CLAIM: IntelligenceCoordinator
+OWNER: Volume 5
+REASON: Unified facade for intellectual amplification (analogical reasoning, hypothesis generation, Socratic challenge, growth tracking)
+CONTESTED: no
+```
+
+```
+CLAIM: AnalogicalReasoner
+OWNER: Volume 5
+REASON: Cross-domain structural mapping with canonical and novel analogy discovery
+CONTESTED: no
+```
+
+```
+CLAIM: HypothesisGenerator
+OWNER: Volume 5
+REASON: Knowledge gap identification and testable hypothesis generation with provenance
+CONTESTED: no
+```
+
+```
+CLAIM: SocraticChallenger
+OWNER: Volume 5
+REASON: Constructive reasoning challenge system with resolution tracking
+CONTESTED: no
+```
+
+```
+CLAIM: GrowthTracker
+OWNER: Volume 5
+REASON: Per-user intellectual development tracking with domain mastery profiles
+CONTESTED: no
+```
+
+```
+CLAIM: CausalInferenceEngine
+OWNER: Volume 5
+REASON: Temporal correlation analysis for anticipatory intelligence (deferred to later tier)
+CONTESTED: no
+```
+
+```
+CLAIM: OperationalDiagnostician + InvariantEvaluator + RemediationEngine
+OWNER: Volume 5 (contested)
+REASON: System self-diagnostics lives in src/intelligence/ but is infrastructure-oriented. See conflict flag below.
+CONTESTED: yes — potential overlap with Volume 8 (observability) and Volume 9 (health truthfulness governance)
+```
+
+```
+CLAIM: AcquisitionCoordinator + ArXivFetcher + LocalWatcher + ContentQueue
+OWNER: Volume 5
+REASON: Content acquisition layer (src/acquisition/) feeding the intelligence pipeline. All deferred.
+CONTESTED: no
+```
+
 ---
 
 ## Dependency Declarations (Agent-Registered)
@@ -168,6 +224,36 @@ STATUS: pending
 INTERFACE: Pydantic models in contracts/api_schemas.py → generated TypeScript types via scripts/generate_contracts.sh
 ```
 
+```
+DEPENDENCY: Volume 5 needs MemoryManager (L4 query_facts, L9 get_profile/update_profile, L10 search_similar, L3 store_episode) from Volume 1
+STATUS: pending
+INTERFACE: MemoryManager.l4.query_facts(query, min_confidence, limit) -> list[DeclarativeFact]; MemoryManager.l9.get_profile(user_id) -> UserProfile; MemoryManager.l10.search_similar(query, n_results) -> list[dict]; MemoryManager.l3.store_episode(Episode) -> None
+```
+
+```
+DEPENDENCY: Volume 5 needs RefinedKnowledge schema from Volume 3 (Learning)
+STATUS: pending
+INTERFACE: RefinedKnowledge Pydantic schema produced by KnowledgeSynthesizer, consumed by intelligence amplification via L4 memory queries
+```
+
+```
+DEPENDENCY: Volume 5 needs ContentIngester and KnowledgeEngine from Volume 3 (Learning) for AcquisitionCoordinator (DEFERRED)
+STATUS: pending
+INTERFACE: ContentIngester.ingest(source, content_type, metadata) -> NormalizedContent; KnowledgeEngine.acquire(KnowledgeSource) -> AcquisitionResult
+```
+
+```
+DEPENDENCY: Volume 2 (Orchestrator) needs IntelligenceCoordinator.amplify_query(), cross_domain_insight(), challenge_and_refine() from Volume 5
+STATUS: pending
+INTERFACE: IntelligenceCoordinator methods as specified in Volume 5 B.3
+```
+
+```
+DEPENDENCY: Volume 5 needs Pydantic schemas (StructuralAnalogy, Hypothesis, ResearchGap, SocraticChallenge, IntellectualProfile, CalibratedConfidence, ProvenanceChain, ProvenanceStep, SourceQuality) from Volume 1 (Memory schemas)
+STATUS: pending
+INTERFACE: All schemas as specified in Volume 5 B.3 schema listing
+```
+
 ---
 
 ## Conflict Flags (Agent-Registered)
@@ -186,6 +272,22 @@ VOLUMES: 8 vs 2 vs 7
 PROPOSED RESOLUTION: ChatRequest.query is the canonical field name. Orchestrator accepts 'query'. Console sends 'query'. Already aligned with Attempt 3.
 STATUS: resolved
 RESOLUTION: Field name is 'query' everywhere.
+```
+
+```
+CONFLICT: OperationalDiagnostician ownership ambiguity
+VOLUMES: 5 vs 8 vs 9
+PROPOSED RESOLUTION: OperationalDiagnostician lives in src/intelligence/ but its purpose (health truthfulness checking, data flow analysis, remediation patches) overlaps with Volume 8 (Infrastructure/observability) and Volume 9 (Governance/validation). The InvariantEvaluator is governance-adjacent. The RemediationEngine is self-modification-adjacent (Volume 4). Proposed: Move operational diagnostics to Volume 9 (Governance) since health truthfulness is fundamentally a governance concern per Volume 0 P4 (Validation Must Be Real). Volume 5 retains only user-facing amplification components.
+STATUS: open
+RESOLUTION: [awaiting gate review]
+```
+
+```
+CONFLICT: Intelligence schemas ownership — are StructuralAnalogy, Hypothesis, etc. memory schemas or intelligence schemas?
+VOLUMES: 1 vs 5
+PROPOSED RESOLUTION: Per AGENT_COMM.md pre-registered ownership, Volume 1 owns all Pydantic schemas for data entering/leaving memory layers. These schemas (StructuralAnalogy, Hypothesis, ResearchGap, SocraticChallenge, IntellectualProfile) are stored in and queried from memory layers, so they belong to Volume 1. Volume 5 consumes them. Volume 5 defines interface contracts (method signatures, expected behavior); Volume 1 defines data schemas. The gate should confirm this split.
+STATUS: open
+RESOLUTION: [awaiting gate review]
 ```
 
 ---
