@@ -10,7 +10,7 @@
 | **Supersedes** | N/A |
 | **Superseded by** | N/A |
 | **Author** | Oz |
-| **Version** | v3 |
+| **Version** | v4 |
 | **Created** | 2026-03-10 |
 | **Last Modified** | 2026-03-10 |
 
@@ -556,11 +556,64 @@ Every document receives a unique alphanumeric identifier for machine-sortable se
 | `DB-X00-001` | `PROJECT_CONVENTIONS.md` | Project Conventions |
 | `DB-X00-002` | `VOLUME_TEMPLATE.md` | Volume Template |
 | `DB-X00-003` | `AGENT_COMM.md` | Agent Communication Hub |
+| `DB-X00-004` | `DISTILLATION_PROTOCOL.md` | Distillation Protocol |
+| `DB-X00-005` | `CODING_PROTOCOL.md` | Coding Protocol |
+| `DB-TPL-001` | `prompts/distill-phase1.md` | Phase 1 Distillation Prompt Template |
+| `DB-TPL-002` | `prompts/distill-phase2.md` | Phase 2 Distillation Prompt Template |
+| `DB-TPL-003` | `prompts/integration-gate.md` | Integration Gate Prompt Template |
+| `DB-TPL-004` | `prompts/coding-agent.md` | Coding Agent Prompt Template |
 
 **Future doc type prefixes** (reserved, not yet in use):
 - `ADR-NNN` — Architecture Decision Records
 - `RFC-NNN` — Request for Comments / proposals
 - `RUN-NNN` — Runbooks / operational procedures
+- `DB-TPL-NNN` — Agent prompt templates (active, assigned above)
+
+---
+
+## 10. Metadata Strategy
+
+Not all files benefit from the same level of tracking metadata. The full doc standard (Section 9) is designed for **design documents** — files that capture intent, decisions, and specifications that change infrequently and deliberately. Source code files change constantly, and git is purpose-built to track that.
+
+### 10.1 File Categories and Metadata Requirements
+
+**Full Doc Standard (Section 9 header + footer):**
+- Design Bible volumes (`design-bible/*.md`)
+- Infrastructure docs (`DISTILLATION_PROTOCOL.md`, `CODING_PROTOCOL.md`, etc.)
+- Agent prompt templates (`design-bible/prompts/*.md`)
+- Architecture Decision Records (`docs/adr/*.md`)
+- Any markdown document that captures design intent or project policy
+
+**Module Docstring Only (no header/footer):**
+- Python source files (`src/**/*.py`) — require a module-level docstring stating purpose and architectural context
+- Python test files (`tests/**/*.py`) — require a module-level docstring describing what is being tested
+- TypeScript source files (`console/src/**/*.ts`, `*.tsx`) — require a file-level JSDoc comment
+
+**Purpose Comment Only (one-liner):**
+- Shell scripts (`scripts/*.sh`) — require `# Purpose: <description>` as the second line (after shebang)
+- Configuration files (`pyproject.toml`, `tsconfig.json`, `vite.config.ts`) — no metadata required (self-documenting via structure)
+- Data/placeholder files (`.gitkeep`, `.env.example`) — no metadata required
+
+**No Metadata Required:**
+- `__init__.py` files (empty or re-exports only)
+- Generated files (TypeScript types from Pydantic, lockfiles)
+- Binary/data files (ML models, images, databases)
+
+### 10.2 Rationale
+
+Git provides authoritative authorship, timestamps, and change history for all files. The full doc standard adds value only where:
+1. **Design intent matters more than code diff** — a volume's modification history explains *why* a design changed, which `git log` doesn't capture well
+2. **Cross-referencing is needed** — Doc IDs enable machine-searchable links between documents
+3. **Agent coordination requires versioning** — distillation agents need to know which version of a spec they're working from
+
+For source code, git + conventional commits + module docstrings provide equivalent traceability without the maintenance overhead of keeping header metadata in sync.
+
+### 10.3 Enforcement
+
+- The doc linter (`scripts/lint-docs.sh`) enforces Section 9 compliance on `design-bible/**/*.md`
+- Ruff enforces module docstring presence on Python files (rule `D100`/`D104` when enabled)
+- Code review verifies shell script purpose comments
+- `__init__.py` files and generated files are exempt from all metadata requirements
 
 ---
 
@@ -571,3 +624,4 @@ Every document receives a unique alphanumeric identifier for machine-sortable se
 | v1 | 2026-03-10 | Oz | Initial creation — Sections 1-8: project layout, naming conventions, coding standards, imports, Pydantic schemas, error hierarchy, logging, configuration | Created the rulebook for how all code and files in the rebuild should be organized and named |
 | v2 | 2026-03-10 | Oz | Added Section 9: Documentation Standard with required header/footer, modification history table, and enforcement rules; added header/footer to this document | Added a mandatory tracking system so every document has a clear owner, version history, and plain-English change log |
 | v3 | 2026-03-10 | Oz | Added Section 9.4: Document ID Scheme (DB-VNN-SSS); added Doc ID as first field in header template; assigned IDs to all 14 existing documents; added enforcement rule 7 | Added a numbering system so every document has a unique machine-searchable code |
+| v4 | 2026-03-10 | Oz | Added Section 10: Metadata Strategy — defines which file types get full doc standard vs. module docstrings vs. purpose comments vs. no metadata; registered DB-X00-004/005 and DB-TPL-001 through 004 in Section 9.4 ID table | Added a policy that says design docs get full tracking headers, code files just need a description at the top, and git handles the rest |
