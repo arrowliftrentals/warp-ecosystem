@@ -10,7 +10,7 @@
 | **Supersedes** | N/A |
 | **Superseded by** | N/A |
 | **Author** | Oz |
-| **Version** | v1 |
+| **Version** | v2 |
 | **Created** | 2026-03-10 |
 | **Last Modified** | 2026-03-10 |
 
@@ -176,6 +176,40 @@ These rules analyze relationships between files. Require building an import grap
 - **Check:** For each directory in `src/atlas/` (memory, orchestrator, etc.), verify that at least one test file exists in `tests/acceptance/` that imports or references that subsystem. The test file must contain at least one function making an HTTP request (detected by imports of `httpx`, `requests`, `TestClient`, or `AsyncClient`).
 - **Rationale:** No subsystem is done until its acceptance test passes against the live system.
 
+### DL-109: Schema Name Collision Detection
+- **Source:** Volume 0 P8, shared-contracts.md §1
+- **Severity:** BLOCK
+- **Check:** Walk all `schemas.py` files across subsystems (`memory/schemas.py`, `governance/schemas.py`, `learning/schemas.py`, `orchestrator/schemas.py`, `self_modify/schemas.py`, `contracts/api_schemas.py`). Extract all Pydantic `BaseModel` subclass names via AST. Flag any class name that appears in more than one subsystem's schema file. Exception: re-exports in `__init__.py` that import from the canonical location are not collisions.
+- **Rationale:** Two subsystems defining `UserProfile` independently creates silent type confusion at integration boundaries. Schema names must be globally unique across `atlas.*`.
+
+### DL-110: Interface Signature Mismatch at Boundaries
+- **Source:** shared-contracts.md §2, Volume 0 P3
+- **Severity:** BLOCK
+- **Check:** For each boundary contract in `shared-contracts.md` §2 (e.g., `MemoryManager.assemble_context()`):
+  1. Extract the implementation's actual signature from the provider module via AST.
+  2. Extract call-site signatures from consumer modules via AST (how callers invoke the method — argument names, count, keyword usage).
+  3. Flag mismatches: missing parameters, extra required parameters, return type divergence between provider and what consumers destructure/type-annotate.
+  The contract in `shared-contracts.md` is the arbiter — both provider and consumer must match it.
+- **Rationale:** Phase 1 proved cross-volume conflicts are the norm. This catches them at the code level before integration tests fail. Two implementations that each pass their own tests but disagree on the interface between them is the most common integration failure.
+
+### DL-111: Configuration Key Collision
+- **Source:** PROJECT_CONVENTIONS §8, Volume 0 P5
+- **Severity:** BLOCK
+- **Check:** Walk all `BaseSettings` subclasses (pydantic-settings) across subsystems. Extract field names and their `env_prefix` + field name (the actual environment variable). Also scan for direct `os.getenv()` and `os.environ.get()` calls. Flag any environment variable name used by more than one subsystem with different semantics (different type, different default, or different owning module). Exception: `shared/config.py` is the canonical owner — other modules reading the same key via `AtlasConfig` are not collisions.
+- **Rationale:** Two subsystems reading the same env var with different expectations is a silent runtime conflict that no unit test catches.
+
+### DL-112: Symbol Import Ambiguity
+- **Source:** PROJECT_CONVENTIONS §4, Volume 0 P8
+- **Severity:** WARN
+- **Check:** Build a symbol-to-module map: for every public class and function exported from `src/atlas/*/__init__.py`, record `(symbol_name, module_path)`. Flag any symbol name that maps to more than one module path. Example: if both `atlas.memory.schemas.UserProfile` and `atlas.governance.schemas.UserProfile` exist, flag it even if DL-109 didn't catch it (e.g., one is not a Pydantic model).
+- **Rationale:** Ambiguous imports lead to `from atlas.X import Foo` resolving to the wrong `Foo` depending on import order or IDE autocomplete. The developer (or agent) must never have to guess which `Foo` they're getting.
+
+### DL-113: Contract Version Drift
+- **Source:** shared-contracts.md, agent-comm/vol-*.md
+- **Severity:** WARN
+- **Check:** Parse `shared-contracts.md` for interface signatures. Parse each volume's B.3 section for interface signatures. Flag cases where a volume's B.3 contract defines a signature that differs from `shared-contracts.md` for the same interface. The shared contract is authoritative — if a volume's B.3 drifted during Phase 2 editing, this catches it before a coding agent builds against the wrong spec.
+- **Rationale:** Shared contracts are binding (Phase 2 prompt template, step 5). If a volume's B.3 contradicts the shared contract, the coding agent will implement the wrong interface. This must be caught before code is written, not after.
+
 ---
 
 ## 4. Layer 3 Rules: Semantic (Agent-Assisted)
@@ -238,8 +272,11 @@ The linter is a tool — it lives in the tools subsystem but is invoked during d
 | Import graph | Walk all `src/atlas/**/*.py`, extract `import` / `from X import` | Layer 2 |
 | Volume ownership map | Parse `design-bible/agent-comm/vol-*.md` for CLAIM blocks | DL-105 |
 | Dependency matrix | Parse `design-bible/agent-comm/vol-*.md` for DEPENDENCY blocks | DL-105, DL-205 |
+| Schema class names | Walk all `schemas.py`, extract `BaseModel` subclass names | DL-109, DL-112 |
+| Shared contracts | Parse `design-bible/gate-output/shared-contracts.md` §2 signatures | DL-110, DL-113 |
+| Config keys | Walk all `BaseSettings` subclasses + `os.getenv()` calls | DL-111 |
 | B.4 triage tables | Parse volume `.md` files for REBUILD/DEFER/KILL verdicts | DL-201 |
-| B.3 contracts | Parse volume `.md` files for interface signatures | DL-202 |
+| B.3 contracts | Parse volume `.md` files for interface signatures | DL-202, DL-113 |
 | Tier dependency DAG | Hardcoded from build-order-refined.md | DL-102 |
 
 ### 5.3 CLI Interface
@@ -285,7 +322,7 @@ Every violation cites:
 |---|---|
 | Tier 0 | DL-001 through DL-010 (Layer 1) + DL-101, DL-103 |
 | Tier 1 | + DL-102, DL-104 |
-| Tier 2 | + DL-105, DL-106, DL-107, DL-108 (all Layer 2) |
+| Tier 2 | + DL-105 through DL-113 (all Layer 2 including cross-boundary conflict detection) |
 | Tier 3+ | + DL-201 through DL-206 (Layer 3 — agent-assisted, runs in PR review) |
 
 ### 5.6 Integration Points
@@ -330,3 +367,4 @@ The design-lint rules are themselves governed:
 | Version | Date | Modified By | Summary | Laymen Summary |
 |---|---|---|---|---|
 | v1 | 2026-03-10 | Oz | Initial creation — 10 Layer 1 rules (structural/AST), 8 Layer 2 rules (architectural/import-graph), 6 Layer 3 rules (semantic/agent-assisted), implementation plan with CLI interface, activation schedule, and governance of the linter itself | Created the rulebook for a tool that checks if code matches the design intent, not just whether it compiles |
+| v2 | 2026-03-10 | Oz | Added 5 cross-boundary conflict detection rules (DL-109 through DL-113): schema name collision, interface signature mismatch at boundaries, config key collision, symbol import ambiguity, and contract version drift. Updated data sources and activation schedule. | Added rules that catch when two subsystems contradict each other at integration boundaries — the code-level equivalent of the design conflicts found in Phase 1 |
