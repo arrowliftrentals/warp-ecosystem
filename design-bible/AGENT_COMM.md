@@ -10,7 +10,7 @@
 | **Supersedes** | N/A |
 | **Superseded by** | N/A |
 | **Author** | Oz |
-| **Version** | v4 |
+| **Version** | v5 |
 | **Created** | 2026-03-10 |
 | **Last Modified** | 2026-03-10 |
 
@@ -100,15 +100,115 @@ These ownership decisions are made upfront to prevent predictable conflicts:
 ## Ownership Claims (Agent-Registered)
 *[Distillation agents register claims here during their deep dives]*
 
+```
+CLAIM: Console SPA (React frontend application)
+OWNER: Volume 7
+REASON: The browser-hosted console is the sole UI surface for Atlas interaction and observability.
+CONTESTED: no
+```
+
+```
+CLAIM: Console TypeScript type definitions (console/src/lib/types.ts)
+OWNER: Volume 7
+REASON: Console-side TS types are owned by Volume 7; auto-generated from Pydantic schemas (Volume 8/9 source of truth) under R9.
+CONTESTED: no (generation ownership TBD - see Conflict Flag below)
+```
+
+```
+CLAIM: TTS/STT client integration (currently inlined in ChatPanel.tsx)
+OWNER: Volume 7 (contested with Volume 6)
+REASON: Voice logic is currently embedded in ChatPanel.tsx but belongs to Volume 6. Volume 7 consumes a clean interface after extraction.
+CONTESTED: yes (see Conflict Flag below)
+```
+
+```
+CLAIM: Session management client (console/src/lib/session.ts)
+OWNER: Volume 7
+REASON: Client-side session persistence and session API consumption is console-owned. Backend session storage is Volume 8.
+CONTESTED: no
+```
+
 ---
 
 ## Dependency Declarations (Agent-Registered)
 *[Distillation agents declare cross-volume dependencies here]*
 
+```
+DEPENDENCY: Volume 7 needs SSE streaming event format specification from Volume 8
+STATUS: pending
+INTERFACE: SSE event schema: { type: text|thinking|tool_call|tool_result|error|done } (see DB-V07-001 B.3.1)
+```
+
+```
+DEPENDENCY: Volume 7 needs chat response schema (ChatMessage, ThinkingStep, ToolCall) from Volume 2
+STATUS: pending
+INTERFACE: ChatMessage, ThinkingStep, ToolCall interfaces (see DB-V07-001 B.3.4)
+```
+
+```
+DEPENDENCY: Volume 7 needs session CRUD API endpoints from Volume 8
+STATUS: pending
+INTERFACE: GET/POST/DELETE /v1/sessions (see DB-V07-001 B.3.1)
+```
+
+```
+DEPENDENCY: Volume 7 needs memory layer read API from Volume 1 (schemas) and Volume 8 (endpoints)
+STATUS: pending
+INTERFACE: GET /v1/memory/layers, /v1/memory/layers/:name, /v1/memory/search (see DB-V07-001 B.3.1)
+```
+
+```
+DEPENDENCY: Volume 7 needs health endpoint format from Volume 8
+STATUS: pending
+INTERFACE: 10 health endpoints returning { status: string } minimum (see DB-V07-001 B.3.1)
+```
+
+```
+DEPENDENCY: Volume 7 needs WebSocket telemetry protocol from Volume 8
+STATUS: pending
+INTERFACE: ws://host/ws/telemetry with { type: metrics, data: TelemetryPayload } (see DB-V07-001 B.3.2)
+```
+
+```
+DEPENDENCY: Volume 7 needs Pydantic-to-TypeScript type generation pipeline from Volume 8 (R9 enablement)
+STATUS: pending
+INTERFACE: Build-time codegen producing shared/types/ from Pydantic schemas (see DB-V07-001 B.3.5)
+```
+
+```
+DEPENDENCY: Volume 7 needs GovernedOutput type from Volume 9
+STATUS: pending
+INTERFACE: GovernedOutput schema replacing raw response text (see DB-V07-001 B.3.7)
+```
+
 ---
 
 ## Conflict Flags (Agent-Registered)
 *[Distillation agents flag conflicts here for resolution]*
+
+```
+CONFLICT: TTS/STT voice logic inlined in Console ChatPanel.tsx (Vol 7) but owned by Vol 6
+VOLUMES: 7 vs 6
+PROPOSED RESOLUTION: Vol 6 owns TTS/STT implementation. Vol 7 extracts inlined Cartesia/OpenAI voice code from ChatPanel.tsx and consumes a clean interface from Vol 6.
+STATUS: open
+RESOLUTION: [awaiting Vol 6 acknowledgement]
+```
+
+```
+CONFLICT: Endpoint URL prefix inconsistency - console Vite proxy rewrites /api/* but backend uses /v1/* natively
+VOLUMES: 7 vs 8
+PROPOSED RESOLUTION: Vol 8 defines the canonical prefix. Console proxy should pass-through /v1/* directly. Eliminate /api prefix in production.
+STATUS: open
+RESOLUTION: [awaiting Vol 8 acknowledgement]
+```
+
+```
+CONFLICT: TypeScript type generation ownership - who owns the Pydantic-to-TS codegen pipeline?
+VOLUMES: 7 vs 8 vs 9
+PROPOSED RESOLUTION: Vol 8 (API and Infrastructure) owns the codegen tool and CI step. Vol 9 provides governance schemas as input. Vol 7 consumes the generated output.
+STATUS: open
+RESOLUTION: [awaiting integration gate]
+```
 
 ---
 
@@ -134,3 +234,4 @@ The integration gate agent produces its output in `design-bible/gate-output/`. S
 | v2 | 2026-03-10 | Oz | Added documentation standard header/footer per PROJECT_CONVENTIONS.md Section 9 | Added tracking metadata so we know who changed what and when |
 | v3 | 2026-03-10 | Oz | Added Doc ID field (`DB-X00-003`) per PROJECT_CONVENTIONS.md Section 9.4 | Added unique document number for machine searching |
 | v4 | 2026-03-10 | Oz | Added Integration Gate Output section referencing `gate-output/` directory and 6 output files per DISTILLATION_PROTOCOL.md | Added a section pointing to where the integration agent stores its analysis results |
+| v5 | 2026-03-10 | Vol-07 Distillation Agent | 4 ownership claims (Console SPA, TS types, TTS/STT client contested with Vol 6, session management), 8 dependency declarations (SSE format, chat schema, sessions, memory, health, WebSocket, type codegen, GovernedOutput from Vol 1/2/8/9), 3 conflict flags (TTS/STT Vol 7 vs 6, endpoint prefix Vol 7 vs 8, codegen ownership Vol 7 vs 8 vs 9) | Console agent registered what it owns, what it needs from other subsystems, and flagged three cross-volume disagreements |
