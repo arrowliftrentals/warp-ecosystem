@@ -106,6 +106,9 @@ REASON: Output/voice governance schemas owned by Volume 9 per pre-registered bou
 CLAIM: ToolRegistry (registration, lookup, schema export, execution orchestration)
 OWNER: Volume 10
 REASON: Central tool infrastructure per pre-registered boundary — Volume 10 owns DEFINITION, Volume 2 owns INVOCATION.
+CLAIM: SelfModifier pipeline (propose > sandbox > verify > approve > apply)
+OWNER: Volume 4
+REASON: Core self-modification lifecycle orchestrating CodeChange to ImprovementProposal with full sandbox testing.
 CONTESTED: no
 ```
 
@@ -116,6 +119,9 @@ REASON: Prompt optimization schemas belong to the learning/intelligence boundary
 CLAIM: ToolDefinition dataclass and tool_schemas.py Pydantic parameter/result schemas
 OWNER: Volume 10
 REASON: Boundary validation schemas for tool inputs and outputs live with tool definitions.
+CLAIM: VerificationTracker (HMAC-SHA256 cryptographic proof of test execution)
+OWNER: Volume 4
+REASON: Enforcement arm of P4 (validation must be real). Signs command output, stores claims in L4.
 CONTESTED: no
 ```
 
@@ -126,6 +132,9 @@ REASON: Intent classification belongs to the orchestrator pipeline, not memory.
 CLAIM: Core tool handlers (FileTools, GitTools, MemoryTools, ConversationTools, SystemTools, WebTools)
 OWNER: Volume 10
 REASON: Tool implementation classes and their handler methods. Volume 10 owns what each tool does.
+CLAIM: MetaCognitiveMonitor (validation theater detection)
+OWNER: Volume 4
+REASON: 7 heuristic checks for validation theater patterns. Operates on proposals pre-approval.
 CONTESTED: no
 ```
 
@@ -136,6 +145,9 @@ REASON: Knowledge librarian is an intelligence subsystem; schemas belong with it
 CLAIM: STEM computational backends (backends/mathematics.py, science.py, engineering.py, data_science.py, additive_manufacturing.py)
 OWNER: Volume 10
 REASON: ADR-0030 computation-first backends are tool-layer implementation with no orchestrator dependency.
+CLAIM: RiskAssessor + ApprovalAutomator (risk scoring and graduated approval)
+OWNER: Volume 4
+REASON: 7-gate risk scoring with auto-approve (LOW risk only) / human escalation.
 CONTESTED: no
 ```
 
@@ -146,6 +158,9 @@ REASON: Meta-assessment/benchmarking schemas have no consumer in the rebuild pip
 CLAIM: Security/pentest tool stack (container_manager, engagement_scope, external_tool_manifest, external_tool_discovery, spec_generator, arsenal)
 OWNER: Volume 10
 REASON: External tool governance and discovery infrastructure per ADR-0028/0029.
+CLAIM: ValidationOrchestrator + APIContractValidator (multi-stage code validation)
+OWNER: Volume 4
+REASON: 5-stage validation chain (syntax > imports > API contracts > patterns > intent).
 CONTESTED: no
 ```
 
@@ -153,6 +168,9 @@ CONTESTED: no
 CLAIM: Screen control subsystem (accessibility.py, controller.py, app_launcher.py)
 OWNER: Volume 10
 REASON: macOS UI automation is an external capability surface, not orchestrator logic.
+CLAIM: SandboxManager + SandboxExecutor + DockerProvider + DockerExecutor (sandbox layer)
+OWNER: Volume 4
+REASON: Docker-based isolated code execution with snapshot-and-rollback.
 CONTESTED: no
 ```
 
@@ -231,6 +249,9 @@ CONTESTED: no
 CLAIM: learning/schemas.py and learning/errors.py (learning-specific Pydantic schemas and error types)
 OWNER: Volume 3
 REASON: Pydantic schemas and error types specific to the learning subsystem
+CLAIM: IntegrityGuard (SHA-256 tamper detection)
+OWNER: Volume 4
+REASON: Critical file hash verification at startup. Detects unauthorized modification of validation code.
 CONTESTED: no
 ```
 
@@ -336,6 +357,39 @@ INTERFACE: record_proposal_outcome(proposal_id, proposal_type, status, ...) -> d
 DEPENDENCY: Volume 8 needs learning health/stats endpoints from Volume 3
 STATUS: pending
 INTERFACE: LearningManager.get_stats() -> dict, EffectivenessTracker.get_learning_patterns() -> dict
+DEPENDENCY: Volume 4 needs MemoryManager.l4 (store_fact, query_facts) from Volume 1
+STATUS: pending
+INTERFACE: store_fact(content, source, confidence, metadata) -> str; query_facts(query, min_confidence, limit) -> list[DeclarativeFact]
+```
+
+```
+DEPENDENCY: Volume 4 needs CommandEvidence/ValidationClaim Pydantic schemas from Volume 1
+STATUS: pending
+INTERFACE: CommandEvidence(BaseModel), ValidationClaim(BaseModel), ValidationClaimType(str, Enum)
+```
+
+```
+DEPENDENCY: Volume 4 needs DecisionValidator.validate_intent() from Volume 9
+STATUS: pending
+INTERFACE: validate_intent(intent, context) -> ValidationResult
+```
+
+```
+DEPENDENCY: Volume 4 needs API endpoint registration from Volume 8
+STATUS: pending
+INTERFACE: POST /v1/proposals, GET /v1/proposals/{id}, POST /v1/sandbox/execute
+```
+
+```
+DEPENDENCY: Volume 2 needs SelfModifier.propose_improvement() from Volume 4
+STATUS: pending
+INTERFACE: async propose_improvement(title, description, changes, progress_callback) -> ImprovementProposal
+```
+
+```
+DEPENDENCY: Volume 3 needs proposal outcomes from Volume 4
+STATUS: pending
+INTERFACE: ImprovementProposal with status, risk_assessment, ValidationClaim records in L4
 ```
 
 ---
@@ -375,6 +429,21 @@ VOLUMES: 3 vs 1 vs 9
 PROPOSED RESOLUTION: Volume 3 KILLs this component. Volume 9 (Governance) or Volume 1 (Memory) should own memory validation if rebuilt.
 STATUS: open
 RESOLUTION: [awaiting integration gate]
+
+```
+CONFLICT: Verification schemas ownership
+VOLUMES: 1 vs 4
+PROPOSED RESOLUTION: Volume 1 owns schemas (data entering memory). Volume 4 owns behavioral interface (sign, verify, claim).
+STATUS: open
+RESOLUTION: [awaiting gate review]
+```
+
+```
+CONFLICT: RemediationEngine overlap
+VOLUMES: 4 vs 5 vs 9
+PROPOSED RESOLUTION: RemediationEngine is self-modification. Should flow through Volume 4 pipeline. Volume 5 owns diagnostics. Volume 4 owns remediation.
+STATUS: open
+RESOLUTION: [awaiting gate review]
 ```
 
 ---
