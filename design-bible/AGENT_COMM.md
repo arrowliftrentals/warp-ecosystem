@@ -11,6 +11,7 @@
 | **Superseded by** | N/A |
 | **Author** | Oz |
 | **Version** | v5 |
+|| **Version** | v5 |
 | **Created** | 2026-03-10 |
 | **Last Modified** | 2026-03-10 |
 
@@ -109,6 +110,9 @@ REASON: Central tool infrastructure per pre-registered boundary — Volume 10 ow
 CLAIM: SelfModifier pipeline (propose > sandbox > verify > approve > apply)
 OWNER: Volume 4
 REASON: Core self-modification lifecycle orchestrating CodeChange to ImprovementProposal with full sandbox testing.
+CLAIM: FastAPI app factory, startup/shutdown lifecycle, middleware stack
+OWNER: Volume 8
+REASON: Server creation, middleware registration, and lifespan management are API infrastructure concerns.
 CONTESTED: no
 ```
 
@@ -122,6 +126,9 @@ REASON: Boundary validation schemas for tool inputs and outputs live with tool d
 CLAIM: VerificationTracker (HMAC-SHA256 cryptographic proof of test execution)
 OWNER: Volume 4
 REASON: Enforcement arm of P4 (validation must be real). Signs command output, stores claims in L4.
+CLAIM: Error taxonomy (AtlasError hierarchy, ErrorCategory, ErrorSeverity)
+OWNER: Volume 8 (shared/errors.py)
+REASON: The error hierarchy is cross-cutting infrastructure consumed by every subsystem. Volume 8 defines it; others import it.
 CONTESTED: no
 ```
 
@@ -135,6 +142,9 @@ REASON: Tool implementation classes and their handler methods. Volume 10 owns wh
 CLAIM: MetaCognitiveMonitor (validation theater detection)
 OWNER: Volume 4
 REASON: 7 heuristic checks for validation theater patterns. Operates on proposals pre-approval.
+CLAIM: Configuration system (AtlasConfig, pydantic-settings)
+OWNER: Volume 8 (shared/config.py)
+REASON: Server configuration, feature flags, and env-var loading are infrastructure concerns.
 CONTESTED: no
 ```
 
@@ -148,6 +158,9 @@ REASON: ADR-0030 computation-first backends are tool-layer implementation with n
 CLAIM: RiskAssessor + ApprovalAutomator (risk scoring and graduated approval)
 OWNER: Volume 4
 REASON: 7-gate risk scoring with auto-approve (LOW risk only) / human escalation.
+CLAIM: API request/response Pydantic schemas for chat endpoint (ChatRequest, ChatResponse, EvidenceRef)
+OWNER: Volume 8 (contracts/api_schemas.py)
+REASON: Cross-boundary schemas shared with Console (Volume 7) live in contracts/. Volume 8 defines the HTTP contract; Volume 2 defines the orchestrator interface.
 CONTESTED: no
 ```
 
@@ -161,6 +174,9 @@ REASON: External tool governance and discovery infrastructure per ADR-0028/0029.
 CLAIM: ValidationOrchestrator + APIContractValidator (multi-stage code validation)
 OWNER: Volume 4
 REASON: 5-stage validation chain (syntax > imports > API contracts > patterns > intent).
+CLAIM: ErrorResponse schema (structured error JSON body)
+OWNER: Volume 8
+REASON: HTTP error formatting is an API-layer concern.
 CONTESTED: no
 ```
 
@@ -171,6 +187,9 @@ REASON: macOS UI automation is an external capability surface, not orchestrator 
 CLAIM: SandboxManager + SandboxExecutor + DockerProvider + DockerExecutor (sandbox layer)
 OWNER: Volume 4
 REASON: Docker-based isolated code execution with snapshot-and-rollback.
+CLAIM: IntelligenceCoordinator
+OWNER: Volume 5
+REASON: Unified facade for intellectual amplification (analogical reasoning, hypothesis generation, Socratic challenge, growth tracking)
 CONTESTED: no
 ```
 
@@ -186,6 +205,9 @@ CONTESTED: no
 CLAIM: ActiveLearner (correction collection, retraining triggers)
 OWNER: Volume 3
 REASON: Core learning loop component — collects user corrections and determines when retraining is needed
+CLAIM: AnalogicalReasoner
+OWNER: Volume 5
+REASON: Cross-domain structural mapping with canonical and novel analogy discovery
 CONTESTED: no
 ```
 
@@ -193,6 +215,9 @@ CONTESTED: no
 CLAIM: ModelTrainer (intent classifier retraining pipeline)
 OWNER: Volume 3
 REASON: Trains and validates ML models using corrections; tightly coupled to ActiveLearner
+CLAIM: HypothesisGenerator
+OWNER: Volume 5
+REASON: Knowledge gap identification and testable hypothesis generation with provenance
 CONTESTED: no
 ```
 
@@ -200,6 +225,9 @@ CONTESTED: no
 CLAIM: ModelRegistry (ML model version management)
 OWNER: Volume 3
 REASON: Manages model loading, promotion, rollback — consumed by learning effectiveness pipeline
+CLAIM: SocraticChallenger
+OWNER: Volume 5
+REASON: Constructive reasoning challenge system with resolution tracking
 CONTESTED: no
 ```
 
@@ -207,6 +235,9 @@ CONTESTED: no
 CLAIM: EffectivenessTracker + ABTestOrchestrator + StatisticalAnalyzer + GroundTruthCollector
 OWNER: Volume 3
 REASON: A/B testing and statistical validation of retraining outcomes — core learning measurement
+CLAIM: GrowthTracker
+OWNER: Volume 5
+REASON: Per-user intellectual development tracking with domain mastery profiles
 CONTESTED: no
 ```
 
@@ -214,6 +245,9 @@ CONTESTED: no
 CLAIM: OutcomeDetector (implicit response quality signal)
 OWNER: Volume 3
 REASON: Detects whether user follow-up indicates satisfaction or dissatisfaction — feeds learning loop
+CLAIM: CausalInferenceEngine
+OWNER: Volume 5
+REASON: Temporal correlation analysis for anticipatory intelligence (deferred to later tier)
 CONTESTED: no
 ```
 
@@ -252,6 +286,16 @@ REASON: Pydantic schemas and error types specific to the learning subsystem
 CLAIM: IntegrityGuard (SHA-256 tamper detection)
 OWNER: Volume 4
 REASON: Critical file hash verification at startup. Detects unauthorized modification of validation code.
+CLAIM: OperationalDiagnostician + InvariantEvaluator + RemediationEngine
+OWNER: Volume 5 (contested)
+REASON: System self-diagnostics lives in src/intelligence/ but is infrastructure-oriented. See conflict flag below.
+CONTESTED: yes — potential overlap with Volume 8 (observability) and Volume 9 (health truthfulness governance)
+```
+
+```
+CLAIM: AcquisitionCoordinator + ArXivFetcher + LocalWatcher + ContentQueue
+OWNER: Volume 5
+REASON: Content acquisition layer (src/acquisition/) feeding the intelligence pipeline. All deferred.
 CONTESTED: no
 ```
 
@@ -390,6 +434,63 @@ INTERFACE: async propose_improvement(title, description, changes, progress_callb
 DEPENDENCY: Volume 3 needs proposal outcomes from Volume 4
 STATUS: pending
 INTERFACE: ImprovementProposal with status, risk_assessment, ValidationClaim records in L4
+DEPENDENCY: Volume 8 needs Orchestrator.process_command() and Orchestrator.process_command_streaming() from Volume 2
+STATUS: pending
+INTERFACE: async def process_command(command: str, device_id: str, conversation_id: str | None) -> dict; async generator process_command_streaming(...) -> AsyncIterator[StreamEvent]
+```
+
+```
+DEPENDENCY: Volume 8 needs MemoryManager.get_stats(), MemoryManager.get_recent_conversations() from Volume 1
+STATUS: pending
+INTERFACE: To be defined by Volume 1 in B.3
+```
+
+```
+DEPENDENCY: Volume 8 needs GovernedOutput / output governance gate from Volume 9
+STATUS: pending
+INTERFACE: ChatResponse.governed field + EvidenceRef list depend on Volume 9's governance output schema
+```
+
+```
+DEPENDENCY: Volume 8 needs structlog configured logging from shared/logging.py (cross-cutting, no single volume owner)
+STATUS: pending
+INTERFACE: from atlas.shared.logging import log (structlog.BoundLogger)
+```
+
+```
+DEPENDENCY: Volume 7 (Console) needs the ChatRequest/ChatResponse/ErrorResponse schemas from Volume 8 contracts/api_schemas.py for TypeScript type generation
+STATUS: pending
+INTERFACE: Pydantic models in contracts/api_schemas.py → generated TypeScript types via scripts/generate_contracts.sh
+```
+
+```
+DEPENDENCY: Volume 5 needs MemoryManager (L4 query_facts, L9 get_profile/update_profile, L10 search_similar, L3 store_episode) from Volume 1
+STATUS: pending
+INTERFACE: MemoryManager.l4.query_facts(query, min_confidence, limit) -> list[DeclarativeFact]; MemoryManager.l9.get_profile(user_id) -> UserProfile; MemoryManager.l10.search_similar(query, n_results) -> list[dict]; MemoryManager.l3.store_episode(Episode) -> None
+```
+
+```
+DEPENDENCY: Volume 5 needs RefinedKnowledge schema from Volume 3 (Learning)
+STATUS: pending
+INTERFACE: RefinedKnowledge Pydantic schema produced by KnowledgeSynthesizer, consumed by intelligence amplification via L4 memory queries
+```
+
+```
+DEPENDENCY: Volume 5 needs ContentIngester and KnowledgeEngine from Volume 3 (Learning) for AcquisitionCoordinator (DEFERRED)
+STATUS: pending
+INTERFACE: ContentIngester.ingest(source, content_type, metadata) -> NormalizedContent; KnowledgeEngine.acquire(KnowledgeSource) -> AcquisitionResult
+```
+
+```
+DEPENDENCY: Volume 2 (Orchestrator) needs IntelligenceCoordinator.amplify_query(), cross_domain_insight(), challenge_and_refine() from Volume 5
+STATUS: pending
+INTERFACE: IntelligenceCoordinator methods as specified in Volume 5 B.3
+```
+
+```
+DEPENDENCY: Volume 5 needs Pydantic schemas (StructuralAnalogy, Hypothesis, ResearchGap, SocraticChallenge, IntellectualProfile, CalibratedConfidence, ProvenanceChain, ProvenanceStep, SourceQuality) from Volume 1 (Memory schemas)
+STATUS: pending
+INTERFACE: All schemas as specified in Volume 5 B.3 schema listing
 ```
 
 ---
@@ -434,6 +535,27 @@ RESOLUTION: [awaiting integration gate]
 CONFLICT: Verification schemas ownership
 VOLUMES: 1 vs 4
 PROPOSED RESOLUTION: Volume 1 owns schemas (data entering memory). Volume 4 owns behavioral interface (sign, verify, claim).
+
+```
+CONFLICT: Error taxonomy location — PROJECT_CONVENTIONS.md Section 6 specifies shared/errors.py, but Attempt 3's errors.py is at src/errors.py (top-level). The rebuild MUST use shared/errors.py per conventions.
+VOLUMES: 8 (owns errors) vs all consumers
+PROPOSED RESOLUTION: Follow PROJECT_CONVENTIONS.md: atlas/shared/errors.py. No conflict expected — just documenting the relocation.
+STATUS: resolved
+RESOLUTION: shared/errors.py per PROJECT_CONVENTIONS.md Section 6.
+```
+
+```
+CONFLICT: Chat endpoint request field naming — Attempt 3 uses 'query' in ConsoleQueryRequest. The rebuild must preserve this to maintain Console compatibility. Volume 2 (Orchestrator) should accept 'query' as the input field name, not 'message' or 'command'.
+VOLUMES: 8 vs 2 vs 7
+PROPOSED RESOLUTION: ChatRequest.query is the canonical field name. Orchestrator accepts 'query'. Console sends 'query'. Already aligned with Attempt 3.
+STATUS: resolved
+RESOLUTION: Field name is 'query' everywhere.
+```
+
+```
+CONFLICT: OperationalDiagnostician ownership ambiguity
+VOLUMES: 5 vs 8 vs 9
+PROPOSED RESOLUTION: OperationalDiagnostician lives in src/intelligence/ but its purpose (health truthfulness checking, data flow analysis, remediation patches) overlaps with Volume 8 (Infrastructure/observability) and Volume 9 (Governance/validation). The InvariantEvaluator is governance-adjacent. The RemediationEngine is self-modification-adjacent (Volume 4). Proposed: Move operational diagnostics to Volume 9 (Governance) since health truthfulness is fundamentally a governance concern per Volume 0 P4 (Validation Must Be Real). Volume 5 retains only user-facing amplification components.
 STATUS: open
 RESOLUTION: [awaiting gate review]
 ```
@@ -442,6 +564,9 @@ RESOLUTION: [awaiting gate review]
 CONFLICT: RemediationEngine overlap
 VOLUMES: 4 vs 5 vs 9
 PROPOSED RESOLUTION: RemediationEngine is self-modification. Should flow through Volume 4 pipeline. Volume 5 owns diagnostics. Volume 4 owns remediation.
+CONFLICT: Intelligence schemas ownership — are StructuralAnalogy, Hypothesis, etc. memory schemas or intelligence schemas?
+VOLUMES: 1 vs 5
+PROPOSED RESOLUTION: Per AGENT_COMM.md pre-registered ownership, Volume 1 owns all Pydantic schemas for data entering/leaving memory layers. These schemas (StructuralAnalogy, Hypothesis, ResearchGap, SocraticChallenge, IntellectualProfile) are stored in and queried from memory layers, so they belong to Volume 1. Volume 5 consumes them. Volume 5 defines interface contracts (method signatures, expected behavior); Volume 1 defines data schemas. The gate should confirm this split.
 STATUS: open
 RESOLUTION: [awaiting gate review]
 ```
@@ -474,3 +599,5 @@ The integration gate agent produces its output in `design-bible/gate-output/`. S
 || v4 | 2026-03-10 | Oz | Added Integration Gate Output section referencing `gate-output/` directory and 6 output files per DISTILLATION_PROTOCOL.md | Added a section pointing to where the integration agent stores its analysis results |
 || v5 | 2026-03-10 | Distillation Agent V10 | Phase 1: Registered 7 ownership claims (ToolRegistry, tool schemas, core handlers, STEM backends, security/pentest stack, screen control, external integrations), 4 dependency declarations (MemoryManager from V1, DecisionValidator from V9, ToolRegistry execution to V2, tool introspection to V8). No new conflicts. | Volume 10 agent claimed all tool definitions, registries, and capability implementations; documented cross-volume interface needs |
 | v5 | 2026-03-10 | Oz Phase 1 Vol 3 Agent | Phase 1: Registered 10 ownership claims (ActiveLearner, ModelTrainer, ModelRegistry, EffectivenessTracker+AB testing, OutcomeDetector, LearningManager, knowledge pipeline, extractors, PatternLearner, learning schemas/errors), 9 dependency declarations (Volumes 1, 2, 4, 8, 9), 4 conflict flags (cross_layer_linker and hybrid_retriever ownership with Vol 1, knowledge-pipeline schema location, memory_guard ownership) | The learning system agent registered what it owns, what it needs from other systems, and flagged 4 boundary disputes for the integration reviewer |
+|| v4 | 2026-03-10 | Oz | Added Integration Gate Output section referencing `gate-output/` directory and 6 output files per DISTILLATION_PROTOCOL.md | Added a section pointing to where the integration agent stores its analysis results |
+|| v5 | 2026-03-10 | Distillation Agent V8 | Phase 1: Registered 5 ownership claims (server factory, error taxonomy, config, chat schemas, error response), 5 dependency declarations (orchestrator, memory, governance, logging, console types), 2 conflict flags (error location resolved, query field name resolved) | Volume 8 agent claimed its territory and documented what it needs from other subsystems |
