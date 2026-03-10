@@ -6,7 +6,7 @@
 | **Name** | Volume 6: Voice & Multimodal |
 | **Purpose** | Design specification for natural voice interaction — TTS, STT, speaker verification, and governed utterance output |
 | **Owner** | Design Bible / Volume 6 |
-| **Status** | `draft` (Phase 1 complete — B.1-B.4 filled, B.5-B.13 awaiting Phase 2) |
+| **Status** | `phase-1-complete` |
 | **Supersedes** | N/A |
 | **Superseded by** | N/A |
 | **Author** | Oz (Part A) / Distillation Agent V6 (Part B) |

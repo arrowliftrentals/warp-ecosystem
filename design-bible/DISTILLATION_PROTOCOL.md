@@ -10,7 +10,7 @@
 | **Supersedes** | N/A |
 | **Superseded by** | N/A |
 | **Author** | Oz |
-| **Version** | v1 |
+| **Version** | v2 |
 | **Created** | 2026-03-10 |
 | **Last Modified** | 2026-03-10 |
 
@@ -20,7 +20,7 @@
 
 Distillation is the process of extracting design intent from Atlas Attempt 3's codebase (516 Python files, 251,801 lines) into structured Design Bible volumes that programming agents can use to build Atlas v4 from scratch.
 
-Each volume has a dedicated distillation agent. Agents do NOT coordinate directly with each other — they coordinate through `AGENT_COMM.md` and the integration gate.
+Each volume has a dedicated distillation agent. Agents do NOT coordinate directly with each other — they coordinate through their per-volume file in `design-bible/agent-comm/vol-XX.md` and the integration gate. The consolidated view in `AGENT_COMM.md` is read-only for agents.
 
 **Two-phase approach prevents:**
 - Agents making incompatible design decisions (caught at the gate)
@@ -113,10 +113,10 @@ Per-volume quality assessment:
 5. Fill out B.5-B.13
 6. Complete B.12 (Oversight Self-Review) — MANDATORY
 7. Complete B.13 (Design Quality Scorecard) — minimum passing score: 30/45
-8. Update `AGENT_COMM.md` with any new claims or dependencies discovered
+8. Update `design-bible/agent-comm/vol-XX.md` (your per-volume file) with any new claims or dependencies discovered. Do **NOT** edit `AGENT_COMM.md` directly — it is read-only for agents.
 9. Submit completed volume
 
-**Constraint enforcement:** If a Phase 2 agent's design contradicts an approved shared contract, the contract wins. The agent must either conform or flag a contract revision request in `AGENT_COMM.md`.
+**Constraint enforcement:** If a Phase 2 agent's design contradicts an approved shared contract, the contract wins. The agent must either conform or flag a contract revision request in their per-volume agent-comm file.
 
 ---
 
@@ -172,7 +172,7 @@ The integration gate validates B.12 by checking: does the self-review mention ev
 B.4 must assign a verdict (REBUILD/DEFER/KILL) to every code file listed in A.2. The gate agent verifies file count matches.
 
 ### 6.4 Interface Contract Consistency
-For each DEPENDENCY declared in `AGENT_COMM.md`, both the provider and consumer volumes must have matching interface definitions in B.3. Mismatches are flagged as conflicts.
+For each DEPENDENCY declared in `AGENT_COMM.md` (or the per-volume agent-comm files), both the provider and consumer volumes must have matching interface definitions in B.3. Mismatches are flagged as conflicts.
 
 ---
 
@@ -204,7 +204,7 @@ Each distillation agent is a Warp agent session. The user launches the session w
 | Template | Used For | Placeholders |
 |---|---|---|
 | `distill-phase1.md` | Phase 1 distillation agents | `{{VOLUME_NUMBER}}`, `{{VOLUME_NAME}}`, `{{SOURCE_MANIFEST_PATH}}` |
-| `distill-phase2.md` | Phase 2 distillation agents | `{{VOLUME_NUMBER}}`, `{{VOLUME_NAME}}`, `{{SOURCE_MANIFEST_PATH}}`, `{{CONTRACTS_PATH}}` |
+| `distill-phase2.md` | Phase 2 distillation agents | `{{VOLUME_NUMBER}}`, `{{VOLUME_NAME}}`, `{{VOLUME_NUMBER_PADDED}}`, `{{SOURCE_MANIFEST_PATH}}`, `{{CONTRACTS_PATH}}` |
 | `integration-gate.md` | Integration gate agent | `{{PHASE}}` (1 or final) |
 | `coding-agent.md` | Coding agents (post-distillation) | `{{SUBSYSTEM}}`, `{{VOLUME_PATH}}`, `{{TIER}}` |
 
@@ -233,14 +233,14 @@ Same as Phase 1, but using `distill-phase2.md` template. The agent also reads th
 **Parallelism rules:**
 - Phase 1: All 10 volumes can run in parallel (no cross-dependencies at this stage)
 - Integration gate: Sequential (one gate agent)
-- Phase 2: Volumes can run in parallel, but volumes with unresolved dependencies (per `AGENT_COMM.md`) should be sequenced so the provider completes first
+- Phase 2: Volumes can run in parallel, but volumes with unresolved dependencies (per `AGENT_COMM.md` / `agent-comm/`) should be sequenced so the provider completes first
 
 ---
 
 ## 9. Rules Summary
 
 1. **Volume 0 is binding.** Every design decision must align with the principles, anti-patterns, and requirements in Volume 0.
-2. **AGENT_COMM.md is the coordination hub.** All cross-volume claims, dependencies, and conflicts go there.
+2. **Agent-comm files are the coordination hub.** Each agent writes to `design-bible/agent-comm/vol-XX.md`. The consolidated `AGENT_COMM.md` is read-only for agents; the integration gate merges per-volume files into it after each phase.
 3. **Shared contracts are binding after gate approval.** Phase 2 agents must conform.
 4. **No skipping sections.** Every Part B section must be filled. N/A is acceptable with a reason.
 5. **B.12 and B.13 are mandatory.** Incomplete volumes are rejected.
@@ -254,3 +254,4 @@ Same as Phase 1, but using `distill-phase2.md` template. The agent also reads th
 | Version | Date | Modified By | Summary | Laymen Summary |
 |---|---|---|---|---|
 | v1 | 2026-03-10 | Oz | Initial creation — defined two-phase distillation, integration gate protocol (5 output documents), chunking protocol for large volumes, external validation rules, agent instantiation via Warp session prompts | Created the master playbook for how analysis agents extract design knowledge from the old codebase |
+| v2 | 2026-03-10 | Oz | Updated §1, §4, §6.4, §8.2, §8.3, §9 to reference per-volume agent-comm files (`agent-comm/vol-XX.md`) instead of directing agents to write to `AGENT_COMM.md`. Added `{{VOLUME_NUMBER_PADDED}}` to §8.2 template table. | Updated coordination rules so agents write to their own file instead of all fighting over one shared file |

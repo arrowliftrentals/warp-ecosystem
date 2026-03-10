@@ -6,11 +6,11 @@
 | **Name** | Volume 8: API & Infrastructure |
 | **Purpose** | Design specification for the server, routing, middleware, error handling, configuration, startup, and concurrency model |
 | **Owner** | Design Bible / Volume 8 |
-|| **Status** | `active` (Phase 1 complete — B.1-B.4 filled by distillation agent) |
+| **Status** | `phase-1-complete` |
 | **Supersedes** | N/A |
 | **Superseded by** | N/A |
-|| **Author** | Oz (Part A) / Distillation Agent V8 (Part B) |
-|| **Version** | v5 |
+| **Author** | Oz (Part A) / Distillation Agent V8 (Part B) |
+| **Version** | v5 |
 | **Created** | 2026-03-10 |
 | **Last Modified** | 2026-03-10 |
 
@@ -448,5 +448,5 @@ The rebuild starts with 3 files: `server.py`, `middleware.py`, `routes/health.py
 | v1 | 2026-03-10 | Oz | Initial scaffold — Part A pre-loaded with source manifest (5 server files, 35+ route files, error/config files), context brief, and 5 known failure warnings including 81 endpoints needing triage and SQLite async pitfalls | Created the API/infrastructure analysis document with file lists and known problems for the analysis agent to investigate |
 | v2 | 2026-03-10 | Oz | Added documentation standard header/footer per PROJECT_CONVENTIONS.md Section 9 | Added tracking metadata so we know who changed what and when |
 | v3 | 2026-03-10 | Oz | Added Doc ID field (`DB-V08-001`) per PROJECT_CONVENTIONS.md Section 9.4 | Added unique document number for machine searching |
-|| v4 | 2026-03-10 | Oz | Added CORE/PERIPHERAL classification to A.2 Source Manifest per DISTILLATION_PROTOCOL.md Section 5 | Labeled which files agents should read in full vs. skim during Phase 1 |
-|| v5 | 2026-03-10 | Distillation Agent V8 | Phase 1: Filled B.1 (Subsystem Purpose), B.2 (Architecture Overview with 5 components + data flow + concurrency model), B.3 (8 interface contracts: server factory, health, chat, streaming, errors, middleware, config, route pattern), B.4 (Scope Triage: 5 REBUILD, 10 DEFER, 25 KILL across 40 files) | Wrote the design spec for the rebuilt API server — what endpoints to keep, what to kill, and exactly how they should work |
+| v4 | 2026-03-10 | Oz | Added CORE/PERIPHERAL classification to A.2 Source Manifest per DISTILLATION_PROTOCOL.md Section 5 | Labeled which files agents should read in full vs. skim during Phase 1 |
+| v5 | 2026-03-10 | Distillation Agent V8 | Phase 1: Filled B.1 (Subsystem Purpose), B.2 (Architecture Overview with 5 components + data flow + concurrency model), B.3 (8 interface contracts: server factory, health, chat, streaming, errors, middleware, config, route pattern), B.4 (Scope Triage: 5 REBUILD, 10 DEFER, 25 KILL across 40 files) | Wrote the design spec for the rebuilt API server — what endpoints to keep, what to kill, and exactly how they should work |

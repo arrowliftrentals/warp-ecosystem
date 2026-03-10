@@ -6,7 +6,7 @@
 | **Name** | Volume 10: External Tools & Capabilities |
 | **Purpose** | Design specification for the tool ecosystem — file ops, git, web, STEM computation, security tools, screen control, and tool registry |
 | **Owner** | Design Bible / Volume 10 |
-| **Status** | `draft` (Phase 1 distillation — B.1-B.4 filled) |
+| **Status** | `phase-1-complete` |
 | **Supersedes** | N/A |
 | **Superseded by** | N/A |
 | **Author** | Oz (Part A) / Distillation Agent V10 (Part B) |
@@ -392,5 +392,5 @@ Domain tool handlers in `domain_tools.py` dispatch to the appropriate backend ba
 | v1 | 2026-03-10 | Oz | Initial scaffold — Part A pre-loaded with source manifest (30+ tool files, 3 screen files, 20+ docs), context brief, and 5 known failure warnings including 80+ tools needing aggressive triage | Created the tools/capabilities analysis document with file lists and known problems for the analysis agent to investigate |
 | v2 | 2026-03-10 | Oz | Added documentation standard header/footer per PROJECT_CONVENTIONS.md Section 9 | Added tracking metadata so we know who changed what and when |
 | v3 | 2026-03-10 | Oz | Added Doc ID field (`DB-V10-001`) per PROJECT_CONVENTIONS.md Section 9.4 | Added unique document number for machine searching |
-|| v4 | 2026-03-10 | Oz | Added CORE/PERIPHERAL classification to A.2 Source Manifest per DISTILLATION_PROTOCOL.md Section 5 | Labeled which files agents should read in full vs. skim during Phase 1 |
-|| v5 | 2026-03-10 | Distillation Agent V10 | Phase 1: Filled B.1 (subsystem purpose), B.2 (architecture overview with 6-component layer diagram), B.3 (interface contracts for ToolRegistry, ToolDefinition, core handlers, STEM backends, security tools), B.4 (scope triage: 8 REBUILD, 24 DEFER, 14 KILL across 46 components with per-component justifications) | Agent analyzed all 42 tool files and wrote the design specification for what the tool system should look like in the rebuild |
+| v4 | 2026-03-10 | Oz | Added CORE/PERIPHERAL classification to A.2 Source Manifest per DISTILLATION_PROTOCOL.md Section 5 | Labeled which files agents should read in full vs. skim during Phase 1 |
+| v5 | 2026-03-10 | Distillation Agent V10 | Phase 1: Filled B.1 (subsystem purpose), B.2 (architecture overview with 6-component layer diagram), B.3 (interface contracts for ToolRegistry, ToolDefinition, core handlers, STEM backends, security tools), B.4 (scope triage: 8 REBUILD, 24 DEFER, 14 KILL across 46 components with per-component justifications) | Agent analyzed all 42 tool files and wrote the design specification for what the tool system should look like in the rebuild |

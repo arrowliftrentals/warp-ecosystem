@@ -6,7 +6,7 @@
 | **Name** | Volume 5: Intelligence Pipeline |
 | **Purpose** | Design specification for intellectual amplification — analogical reasoning, hypothesis generation, Socratic challenge, and growth tracking |
 | **Owner** | Design Bible / Volume 5 |
-| **Status** | `draft` (Phase 1 complete — B.1-B.4 filled by distillation agent, B.5-B.13 awaiting Phase 2) |
+| **Status** | `phase-1-complete` |
 | **Supersedes** | N/A |
 | **Superseded by** | N/A |
 | **Author** | Oz (Part A) / Oz Phase 1 Distillation Agent (Part B) |
@@ -418,7 +418,7 @@ get_known_chains() -> list[CausalChain]
 | AcquisitionCoordinator | `src/acquisition/coordinator.py` | **DEFER** | Well-structured orchestrator that wires ArXivFetcher + LocalWatcher → ContentQueue → ContentIngester → KnowledgeEngine. Design is sound but depends on Volume 3's ContentIngester and KnowledgeEngine. Per Volume 0 build order, intelligence is Tier 6+ (depends on Tier 3 Memory + Tier 5 Learning). Defer until learning pipeline is wired. |
 | ArXivFetcher | `src/acquisition/arxiv_fetcher.py` | **DEFER** | Clean implementation with Pydantic schemas (ArXivQuery, ArXivPaper), rate limiting per arXiv ToS, and scheduled queries. However, A.4 warning #2 applies: acquisition is premature if the conversation loop doesn't work. External dependency on `arxiv` library. Defer until MVA-1 through MVA-4 pass. |
 | LocalWatcher | `src/acquisition/local_watcher.py` | **DEFER** | Filesystem monitoring with watchdog + polling fallback, SHA256 dedup, .atlasignore support. Useful but not needed until the knowledge pipeline is functional end-to-end. External dependency on `watchdog`. Defer alongside AcquisitionCoordinator. |
-|| ContentQueue | `src/acquisition/content_queue.py` | **DEFER** | Priority heap with Pydantic validation, persistence, dedup, retry. Well-designed utility. However, it only serves the acquisition layer which is itself deferred. Defer alongside acquisition. |
+| ContentQueue | `src/acquisition/content_queue.py` | **DEFER** | Priority heap with Pydantic validation, persistence, dedup, retry. Well-designed utility. However, it only serves the acquisition layer which is itself deferred. Defer alongside acquisition. |
 
 **Cross-cutting rebuild notes (from oversight self-review):**
 
@@ -464,5 +464,5 @@ get_known_chains() -> list[CausalChain]
 | v1 | 2026-03-10 | Oz | Initial scaffold — Part A pre-loaded with source manifest (7 intelligence + 4 acquisition files, 5+ docs), context brief, and 3 known failure warnings including boundary overlap with Volume 3 | Created the intelligence pipeline analysis document with file lists and known problems for the analysis agent to investigate |
 | v2 | 2026-03-10 | Oz | Added documentation standard header/footer per PROJECT_CONVENTIONS.md Section 9 | Added tracking metadata so we know who changed what and when |
 | v3 | 2026-03-10 | Oz | Added Doc ID field (`DB-V05-001`) per PROJECT_CONVENTIONS.md Section 9.4 | Added unique document number for machine searching |
-|| v4 | 2026-03-10 | Oz | Added CORE/PERIPHERAL classification to A.2 source manifest per DISTILLATION_PROTOCOL.md Section 5 | Tagged files as essential vs. nice-to-have for the rebuild analysis |
-|| v5 | 2026-03-10 | Oz Phase 1 Agent | Phase 1 distillation: filled B.1 (purpose), B.2 (architecture with ASCII diagram, 11 component responsibilities), B.3 (interface contracts for all 11 components with exact method signatures, schemas, and dependency maps), B.4 (scope triage: 5 REBUILD, 6 DEFER, 0 KILL), plus 5 cross-cutting rebuild notes from oversight self-review. Registered 9 ownership claims, 6 dependency declarations, and 2 conflict flags in AGENT_COMM.md. | Completed the first analysis pass: defined what the intelligence system should do, how it should be structured, its exact interfaces, and which parts to rebuild vs. delay |
+| v4 | 2026-03-10 | Oz | Added CORE/PERIPHERAL classification to A.2 source manifest per DISTILLATION_PROTOCOL.md Section 5 | Tagged files as essential vs. nice-to-have for the rebuild analysis |
+| v5 | 2026-03-10 | Oz Phase 1 Agent | Phase 1 distillation: filled B.1 (purpose), B.2 (architecture with ASCII diagram, 11 component responsibilities), B.3 (interface contracts for all 11 components with exact method signatures, schemas, and dependency maps), B.4 (scope triage: 5 REBUILD, 6 DEFER, 0 KILL), plus 5 cross-cutting rebuild notes from oversight self-review. Registered 9 ownership claims, 6 dependency declarations, and 2 conflict flags in AGENT_COMM.md. | Completed the first analysis pass: defined what the intelligence system should do, how it should be structured, its exact interfaces, and which parts to rebuild vs. delay |

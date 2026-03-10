@@ -6,7 +6,7 @@
 | **Name** | Volume 3: Learning & Adaptation |
 | **Purpose** | Design specification for the active learning, correction pipeline, retraining, and knowledge ingestion systems |
 | **Owner** | Design Bible / Volume 3 |
-| **Status** | `draft` (Phase 1 distillation complete — B.1-B.4 filled, B.5-B.13 awaiting Phase 2) |
+| **Status** | `phase-1-complete` |
 | **Supersedes** | N/A |
 | **Superseded by** | N/A |
 | **Author** | Oz (Part A) / TBD distillation agent (Part B) |
