@@ -10,7 +10,7 @@
 | **Supersedes** | N/A |
 | **Superseded by** | N/A |
 | **Author** | Oz (Part A) / TBD distillation agent (Part B) |
-| **Version** | v3 |
+| **Version** | v4 |
 | **Created** | 2026-03-10 |
 | **Last Modified** | 2026-03-10 |
 
@@ -155,10 +155,14 @@
 - `tests/orchestrator/` (entire directory)
 - `tests/intent/` (if exists)
 
+**CORE/PERIPHERAL Classification** (per `DISTILLATION_PROTOCOL.md` Section 5):
+- **CORE** (21 files): *Core orchestration:* `atlas.py`, `atlas_handlers.py`, `atlas_command_router.py`, `atlas_llm.py`, `atlas_streaming.py`, `react_engine.py`, `intent_router.py`. *Response pipeline:* `answer_governor.py`, `claim_extractor.py`, `confidence_model.py`, `evidence_store.py`, `evidence_contracts.py`, `response_validator.py`, `prompt_builder.py`. *Intent:* `parser.py`, `grammar.py`, `hybrid_parser.py`, `unified.py`, `decision_validator.py`. *Context:* `memory_context.py`, `services.py`
+- **PERIPHERAL** (56 files): All personality/proactive (6), all autonomous (3), `intent_predictor.py`, `bert_classifier.py`, `llm_classifier.py`, `entities.py`, `prompt_constants.py`, `prompts.py`, `response_formatter.py`, `confirmation_manager.py`, `error_recovery.py`, and all "Other orchestrator files" (38)
+
 ### A.3 Context Brief
 
 **What worked in Attempt 3:**
-- Intent parsing with hybrid BERT + symbolic fallback (84% intent accuracy, 93% domain accuracy)
+- Intent parsing with hybrid BERT
 - ReAct reasoning loop implemented
 - 81 REST endpoints functioning
 - Basic conversation handling (when it didn't fail)
@@ -245,3 +249,4 @@
 | v1 | 2026-03-10 | Oz | Initial scaffold — Part A pre-loaded with source manifest (70+ code files, 30+ docs), context brief, and 5 known failure warnings including god-object orchestrator and unreliable "hi atlas" | Created the orchestrator analysis document with file lists and known problems for the analysis agent to investigate |
 | v2 | 2026-03-10 | Oz | Added documentation standard header/footer per PROJECT_CONVENTIONS.md Section 9 | Added tracking metadata so we know who changed what and when |
 | v3 | 2026-03-10 | Oz | Added Doc ID field (`DB-V02-001`) per PROJECT_CONVENTIONS.md Section 9.4 | Added unique document number for machine searching |
+| v4 | 2026-03-10 | Oz | Added CORE/PERIPHERAL classification to A.2 source manifest per DISTILLATION_PROTOCOL.md Section 5 | Tagged files as essential vs. nice-to-have for the rebuild analysis |

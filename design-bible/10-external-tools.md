@@ -10,7 +10,7 @@
 | **Supersedes** | N/A |
 | **Superseded by** | N/A |
 | **Author** | Oz (Part A) / TBD distillation agent (Part B) |
-| **Version** | v3 |
+| **Version** | v4 |
 | **Created** | 2026-03-10 |
 | **Last Modified** | 2026-03-10 |
 
@@ -116,6 +116,10 @@
 - `tests/tools/` (if exists)
 - `tests/screen/` (if exists)
 
+**CORE/PERIPHERAL Classification** (per `DISTILLATION_PROTOCOL.md` Section 5):
+- **CORE** (10 files): `tool_registry.py`, `tool_schemas.py`, `file_tools.py`, `git_tools.py`, `memory_tools.py`, `conversation_tools.py`, `system_tools.py`, `web_tools.py`, `accessibility.py`, `controller.py`
+- **PERIPHERAL** (32 files): All domain tools (2), security/pentest tools (6), specialized tools (15), external integrations (6), `app_launcher.py`, `memory_extended_tools.py`, `register_domain_tools.py`
+
 ### A.3 Context Brief
 
 **What worked in Attempt 3:**
@@ -202,3 +206,4 @@
 | v1 | 2026-03-10 | Oz | Initial scaffold — Part A pre-loaded with source manifest (30+ tool files, 3 screen files, 20+ docs), context brief, and 5 known failure warnings including 80+ tools needing aggressive triage | Created the tools/capabilities analysis document with file lists and known problems for the analysis agent to investigate |
 | v2 | 2026-03-10 | Oz | Added documentation standard header/footer per PROJECT_CONVENTIONS.md Section 9 | Added tracking metadata so we know who changed what and when |
 | v3 | 2026-03-10 | Oz | Added Doc ID field (`DB-V10-001`) per PROJECT_CONVENTIONS.md Section 9.4 | Added unique document number for machine searching |
+| v4 | 2026-03-10 | Oz | Added CORE/PERIPHERAL classification to A.2 Source Manifest per DISTILLATION_PROTOCOL.md Section 5 | Labeled which files agents should read in full vs. skim during Phase 1 |

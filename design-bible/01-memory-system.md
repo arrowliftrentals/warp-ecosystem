@@ -10,7 +10,7 @@
 | **Supersedes** | N/A |
 | **Superseded by** | N/A |
 | **Author** | Oz (Part A) / TBD distillation agent (Part B) |
-| **Version** | v3 |
+| **Version** | v4 |
 | **Created** | 2026-03-10 |
 | **Last Modified** | 2026-03-10 |
 
@@ -81,6 +81,10 @@
 
 **Test files to read:**
 - `tests/memory/` (entire directory)
+
+**CORE/PERIPHERAL Classification** (per `DISTILLATION_PROTOCOL.md` Section 5):
+- **CORE** (17 files): `__init__.py`, `memory_manager.py`, `schemas.py`, all 10 layer implementations (`l1_working.py` through `l10_vector.py`), `consolidation.py`, `connection_manager.py`, `cross_layer_queries.py`, `embedding_model.py`
+- **PERIPHERAL** (26 files): All `schemas_*.py` variants (17 files), `l10_vector_faiss.py`, `l10_bootstrap.py`, `l10_collections.py`, `database_health.py`, `garbage_collection.py`, `goal_lifecycle.py`, `integrity.py`, `relation_writer.py`, `backup.py`
 
 ### A.3 Context Brief
 
@@ -167,3 +171,4 @@
 | v1 | 2026-03-10 | Oz | Initial scaffold — Part A pre-loaded with source manifest (43 code files, 7 docs), context brief, and 4 known failure warnings | Created the memory system analysis document with file lists and known problems for the analysis agent to investigate |
 | v2 | 2026-03-10 | Oz | Added documentation standard header/footer per PROJECT_CONVENTIONS.md Section 9 | Added tracking metadata so we know who changed what and when |
 | v3 | 2026-03-10 | Oz | Added Doc ID field (`DB-V01-001`) per PROJECT_CONVENTIONS.md Section 9.4 | Added unique document number for machine searching |
+| v4 | 2026-03-10 | Oz | Added CORE/PERIPHERAL classification to A.2 Source Manifest per DISTILLATION_PROTOCOL.md Section 5 | Labeled which files agents should read in full vs. skim during Phase 1 |

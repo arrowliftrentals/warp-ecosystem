@@ -10,7 +10,7 @@
 | **Supersedes** | atlas-identity.md, atlas-constitution-v2.md, COMPREHENSIVE_ANALYSIS_WARP_ATTEMPTS_v1.md, capability-analysis-honest.md, personal-ai-rubric.md, meta-system-rubric.md, SELF_BUILDING_ATLAS_ROADMAP.md, LEARNING_FROM_AI_FAILURES.md, atlas-evolution-pattern.md, business-strategy-discussion.md, critical-architecture-gaps-2026-03.md, atlas-oversights-2026-02-08.md, jarvis-gap-closure-plan.md, exhaustive-cognitive-architecture-analysis.md, atlas-personality.md |
 | **Superseded by** | N/A |
 | **Author** | Oz |
-| **Version** | v3 |
+| **Version** | v4 |
 | **Created** | 2026-03-10 |
 | **Last Modified** | 2026-03-10 |
 
@@ -451,6 +451,75 @@ Each volume answers: What is this subsystem? What worked/failed in Attempt 3? Wh
 
 ---
 
+## 12. Minimum Viable Atlas (MVA)
+
+The MVA is the concrete definition of "done enough to be useful." It is a set of acceptance tests that must ALL pass for Atlas v4 to be called a working system. Coding agents stop scope-creeping when all 5 pass.
+
+### MVA-1: Basic Conversation
+Send `{"query": "hello"}` to `POST /v1/atlas/chat`. Receive a coherent, personality-consistent response within 5 seconds. This is the R1 foundation — if this fails, nothing else matters.
+
+### MVA-2: Evidence-Grounded Response
+Send a factual question (e.g., "What memory layers does Atlas have?"). Receive a response that cites specific evidence (memory retrieval, tool output) rather than hallucinating. Verifiable by checking response metadata for evidence sources.
+
+### MVA-3: Memory Round-Trip
+Store a fact via conversation (e.g., "My favorite color is blue"). In a later query, ask about that fact. Verify the system retrieves it from memory, not from the LLM's training data. This proves L3/L4 memory works end-to-end.
+
+### MVA-4: Learning Round-Trip
+Correct a wrong classification (e.g., Atlas classifies a query as "search" when it should be "memory retrieval"). Issue the correction. In a subsequent identical query, verify the classification is now correct. This proves the learning pipeline works.
+
+### MVA-5: Server Health
+Server boots with zero errors. `GET /health` returns all initialized subsystems as healthy. No subsystem reports healthy unless it can demonstrate actual functionality (R5). This is the baseline sanity check.
+
+**Note:** The integration gate agent may refine these after seeing all Phase 1 outputs. The refined MVA in `gate-output/mva-refined.md` takes precedence once approved.
+
+---
+
+## 13. Build Order
+
+Concrete ordering with dependency gates. Each tier must pass its gate before the next begins.
+
+### Tier 0: Foundation
+`atlas-v4/src/atlas/shared/` — errors, config, logging, types, llm (LLMProvider Protocol)
+No dependencies. No MVA gate.
+
+### Tier 1: Skeleton
+`api/server.py` (empty FastAPI app + `/health` endpoint) + `governance/validator.py` (schema validation gate)
+Depends on: Tier 0
+Gate: Server boots, `/health` returns 200, ruff + mypy pass
+
+### Tier 2: Core Loop
+`orchestrator/engine.py` + `orchestrator/intent.py` + `orchestrator/response.py`
+Depends on: Tier 0, Tier 1
+Gate: **MVA-1 passes** (send hello, get coherent response)
+
+### Tier 3: Memory
+`memory/` — all 10 layers + manager + schemas
+Depends on: Tier 0
+Gate: **MVA-3 passes** (store fact, retrieve it in later query)
+
+### Tier 4: Governance
+`governance/output.py` — response governance (GovernedOutput, evidence grounding)
+Depends on: Tier 2, Tier 3
+Gate: **MVA-2 passes** (evidence-grounded response, not hallucinated)
+
+### Tier 5: Learning
+`learning/` — active learner, correction pipeline, retraining triggers
+Depends on: Tier 3
+Gate: **MVA-4 passes** (correct classification, verify it persists)
+
+### Tier 6+: Capabilities (Parallel)
+- Self-modification — depends on Tier 0-4 minimum
+- Intelligence pipeline — depends on Tier 3, Tier 5
+- Voice — depends on Tier 2, Tier 4
+- External tools — depends on Tier 2
+- Console — depends on Tier 1 (API contracts)
+
+Each Tier 6+ capability follows R3: integrated, tested, documented before the next begins.
+
+**Note:** The integration gate agent will refine this after seeing Phase 1 interface contracts. The refined build order in `gate-output/build-order-refined.md` takes precedence once approved.
+
+---
+
 ## Appendix A: Source Document Index
 
 These documents exist in the old repo and were synthesized into this Bible. They are preserved for provenance but should NOT be read directly by rebuild agents.
@@ -504,3 +573,4 @@ These documents exist in the old repo and were synthesized into this Bible. They
 | v1 | 2026-03-10 | Oz | Initial creation — synthesized from 15+ source documents into system-wide principles, anti-patterns, requirements, and per-subsystem volume index | Created the master blueprint document that all rebuild agents must read first |
 | v2 | 2026-03-10 | Oz | Added documentation standard header/footer per PROJECT_CONVENTIONS.md Section 9 | Added tracking metadata so we know who changed what and when |
 | v3 | 2026-03-10 | Oz | Added Doc ID field (`DB-V00-001`) per PROJECT_CONVENTIONS.md Section 9.4 | Added unique document number for machine searching |
+| v4 | 2026-03-10 | Oz | Added Section 12 (MVA: 5 acceptance tests defining "done") and Section 13 (Build Order: Tier 0-6 with dependency gates and MVA checkpoints) | Added the finish line (5 tests that must pass) and the build sequence (what to build in what order) |

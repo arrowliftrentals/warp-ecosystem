@@ -10,7 +10,7 @@
 | **Supersedes** | N/A |
 | **Superseded by** | N/A |
 | **Author** | Oz (Part A) / TBD distillation agent (Part B) |
-| **Version** | v3 |
+| **Version** | v4 |
 | **Created** | 2026-03-10 |
 | **Last Modified** | 2026-03-10 |
 
@@ -70,10 +70,12 @@
 - `tests/intent/` (if exists, for decision_validator tests)
 - Any tests related to governance/validation
 
+**CORE/PERIPHERAL Classification:** All 12 files are **CORE** (≤40 code files). Read all in full during both Phase 1 and Phase 2.
+
 ### A.3 Context Brief
 
 **What worked in Attempt 3:**
-- DecisionValidator existed and validated intents before execution
+- DecisionValidator existed and validated intents
 - Voice governance (ApprovedUtterance) had a well-designed schema with AuthorityLevel
 - Constitutional framework was ratified (v2) with 10 articles
 - 3 hard rules defined (schema validation, test gate, layer separation)
@@ -156,3 +158,4 @@
 | v1 | 2026-03-10 | Oz | Initial scaffold — Part A pre-loaded with source manifest (8 governance files, 14+ docs including ADR-0031), context brief, and 4 known failure warnings including ungoverned LLM output and graduated governance balance | Created the governance/validation analysis document with file lists and known problems for the analysis agent to investigate |
 | v2 | 2026-03-10 | Oz | Added documentation standard header/footer per PROJECT_CONVENTIONS.md Section 9 | Added tracking metadata so we know who changed what and when |
 | v3 | 2026-03-10 | Oz | Added Doc ID field (`DB-V09-001`) per PROJECT_CONVENTIONS.md Section 9.4 | Added unique document number for machine searching |
+| v4 | 2026-03-10 | Oz | Added CORE/PERIPHERAL classification to A.2 Source Manifest per DISTILLATION_PROTOCOL.md Section 5 | Labeled which files agents should read in full vs. skim during Phase 1 |

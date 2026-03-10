@@ -1,0 +1,51 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Environment
+.env
+.env.local
+
+# Data (gitignored except structure)
+data/db/*.db
+data/db/*.sqlite
+data/models/*.bin
+data/models/*.pt
+data/models/*.onnx
+
+# Node / Frontend
+node_modules/
+console/dist/
+console/.next/
+console/out/
+
+# Testing
+.pytest_cache/
+htmlcov/
+.coverage
+coverage.xml
+
+# mypy
+.mypy_cache/
+
+# OS
+.DS_Store
+Thumbs.db

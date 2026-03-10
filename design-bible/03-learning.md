@@ -10,7 +10,7 @@
 | **Supersedes** | N/A |
 | **Superseded by** | N/A |
 | **Author** | Oz (Part A) / TBD distillation agent (Part B) |
-| **Version** | v3 |
+| **Version** | v4 |
 | **Created** | 2026-03-10 |
 | **Last Modified** | 2026-03-10 |
 
@@ -123,10 +123,14 @@
 **Test files to read:**
 - `tests/learning/` (entire directory)
 
+**CORE/PERIPHERAL Classification** (per `DISTILLATION_PROTOCOL.md` Section 5):
+- **CORE** (15 files): `active_learner.py`, `learning_manager.py`, `feedback_processor.py`, `model_trainer.py`, `model_registry.py`, `retrain_triggers.py`, `outcome_detector.py`, `effectiveness_tracker.py`, `content_ingester.py`, `domain_classifier.py`, `knowledge_synthesizer.py`, `knowledge_extractor.py`, `contradiction_detector.py`, `schemas.py`, `errors.py`
+- **PERIPHERAL** (55 files): All domain extractors (13), all advanced learning (9), remaining knowledge pipeline (11), remaining core utilities (6), and all other files (16)
+
 ### A.3 Context Brief
 
 **What worked in Attempt 3:**
-- Active learner collects user corrections when predictions are wrong
+- Active learner collects user corrections
 - Corrections stored in `data/training/intent_corrections.jsonl`
 - Auto-retraining at 50 corrections threshold
 - Content ingestion pipeline normalizes multiple formats (PDF, code, markdown, URL)
@@ -208,3 +212,4 @@
 | v1 | 2026-03-10 | Oz | Initial scaffold — Part A pre-loaded with source manifest (60+ code files, 10+ docs), context brief, and 4 known failure warnings including scope explosion and never-started AutoRetrainingDaemon | Created the learning system analysis document with file lists and known problems for the analysis agent to investigate |
 | v2 | 2026-03-10 | Oz | Added documentation standard header/footer per PROJECT_CONVENTIONS.md Section 9 | Added tracking metadata so we know who changed what and when |
 | v3 | 2026-03-10 | Oz | Added Doc ID field (`DB-V03-001`) per PROJECT_CONVENTIONS.md Section 9.4 | Added unique document number for machine searching |
+| v4 | 2026-03-10 | Oz | Added CORE/PERIPHERAL classification to A.2 source manifest per DISTILLATION_PROTOCOL.md Section 5 | Tagged files as essential vs. nice-to-have for the rebuild analysis |

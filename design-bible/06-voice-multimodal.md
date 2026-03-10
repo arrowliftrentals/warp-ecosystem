@@ -10,7 +10,7 @@
 | **Supersedes** | N/A |
 | **Superseded by** | N/A |
 | **Author** | Oz (Part A) / TBD distillation agent (Part B) |
-| **Version** | v3 |
+| **Version** | v4 |
 | **Created** | 2026-03-10 |
 | **Last Modified** | 2026-03-10 |
 
@@ -59,10 +59,12 @@
 **Test files to read:**
 - `tests/voice/` (if exists)
 
+**CORE/PERIPHERAL Classification:** All 11 files are **CORE** (≤40 code files). Read all in full during both Phase 1 and Phase 2.
+
 ### A.3 Context Brief
 
 **What worked in Attempt 3:**
-- Voice governance schema (`ApprovedUtterance`) with AuthorityLevel (GROUNDED/ADVISORY/SPECULATIVE) was well-designed
+- Voice governance schema (`ApprovedUtterance`)
 - Content hashing (SHA256) for utterance integrity
 - Two TTS engines available (Piper for speed, XTTS for quality)
 - Speaker verification module existed
@@ -142,3 +144,4 @@
 | v1 | 2026-03-10 | Oz | Initial scaffold — Part A pre-loaded with source manifest (9 voice files, 6 console components, 4 docs), context brief, and 4 known failure warnings including voice/multimodal confusion and STT gap | Created the voice system analysis document with file lists and known problems for the analysis agent to investigate |
 | v2 | 2026-03-10 | Oz | Added documentation standard header/footer per PROJECT_CONVENTIONS.md Section 9 | Added tracking metadata so we know who changed what and when |
 | v3 | 2026-03-10 | Oz | Added Doc ID field (`DB-V06-001`) per PROJECT_CONVENTIONS.md Section 9.4 | Added unique document number for machine searching |
+| v4 | 2026-03-10 | Oz | Added CORE/PERIPHERAL classification to A.2 Source Manifest per DISTILLATION_PROTOCOL.md Section 5 | Labeled which files agents should read in full vs. skim during Phase 1 |

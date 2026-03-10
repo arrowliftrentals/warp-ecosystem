@@ -10,7 +10,7 @@
 | **Supersedes** | N/A |
 | **Superseded by** | N/A |
 | **Author** | Oz (Part A) / TBD distillation agent (Part B) |
-| **Version** | v3 |
+| **Version** | v4 |
 | **Created** | 2026-03-10 |
 | **Last Modified** | 2026-03-10 |
 
@@ -53,10 +53,12 @@
 - `tests/intelligence/` (if exists)
 - `tests/acquisition/` (if exists)
 
+**CORE/PERIPHERAL Classification:** All 11 files are **CORE** (≤40 code files). Read all in full during both Phase 1 and Phase 2.
+
 ### A.3 Context Brief
 
 **What worked in Attempt 3:**
-- IntelligenceCoordinator orchestrates 4 amplification components
+- IntelligenceCoordinator orchestrates
 - AnalogicalReasoner has pre-validated canonical analogies (thermal↔electrical, etc.) and novel discovery via embeddings
 - HypothesisGenerator identifies 4 gap types (contradictory, incomplete, outdated, unexplored)
 - SocraticChallenger detects 4 challenge types with severity levels
@@ -136,3 +138,4 @@
 | v1 | 2026-03-10 | Oz | Initial scaffold — Part A pre-loaded with source manifest (7 intelligence + 4 acquisition files, 5+ docs), context brief, and 3 known failure warnings including boundary overlap with Volume 3 | Created the intelligence pipeline analysis document with file lists and known problems for the analysis agent to investigate |
 | v2 | 2026-03-10 | Oz | Added documentation standard header/footer per PROJECT_CONVENTIONS.md Section 9 | Added tracking metadata so we know who changed what and when |
 | v3 | 2026-03-10 | Oz | Added Doc ID field (`DB-V05-001`) per PROJECT_CONVENTIONS.md Section 9.4 | Added unique document number for machine searching |
+| v4 | 2026-03-10 | Oz | Added CORE/PERIPHERAL classification to A.2 source manifest per DISTILLATION_PROTOCOL.md Section 5 | Tagged files as essential vs. nice-to-have for the rebuild analysis |

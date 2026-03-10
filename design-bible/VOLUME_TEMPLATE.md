@@ -10,7 +10,7 @@
 | **Supersedes** | N/A |
 | **Superseded by** | N/A |
 | **Author** | Oz |
-| **Version** | v3 |
+| **Version** | v4 |
 | **Created** | 2026-03-10 |
 | **Last Modified** | 2026-03-10 |
 
@@ -39,7 +39,16 @@ Each volume has two parts:
 
 ### A.2 Source Manifest
 **Code files to read** (paths relative to `atlas/`):
-- [list of .py files in the subsystem]
+
+Each file must be tagged as **CORE** or **PERIPHERAL** (see `DISTILLATION_PROTOCOL.md` Section 5):
+- **CORE** — Defines architecture, primary interfaces, main logic, Pydantic schemas. Read in full during Phase 1.
+- **PERIPHERAL** — Secondary implementations, utilities, helpers, deprecated. Skimmed in Phase 1, read in full in Phase 2.
+
+Format:
+- `path/to/file.py` — [description] **(CORE)**
+- `path/to/helper.py` — [description] **(PERIPHERAL)**
+
+Volumes with ≤40 code files: all files are CORE (no tagging needed).
 
 **Documentation to read**:
 - [list of architecture docs, ADRs, guides, plans relevant to this subsystem]
@@ -201,3 +210,4 @@ For each criterion, provide the score AND a one-sentence justification.
 | v1 | 2026-03-10 | Oz | Initial creation — defined Part A/B structure, B.1-B.13 sections including acceptance tests (B.8), oversight self-review (B.12), design quality scorecard (B.13) | Created the fill-in-the-blank template that analysis agents use to document each subsystem |
 | v2 | 2026-03-10 | Oz | Added documentation standard header/footer per PROJECT_CONVENTIONS.md Section 9 | Added tracking metadata so we know who changed what and when |
 | v3 | 2026-03-10 | Oz | Added Doc ID field (`DB-X00-002`) per PROJECT_CONVENTIONS.md Section 9.4 | Added unique document number for machine searching |
+| v4 | 2026-03-10 | Oz | Added CORE/PERIPHERAL tagging instructions to A.2 Source Manifest per DISTILLATION_PROTOCOL.md Section 5 | Added labels to source file lists so agents know which files to read in full vs. skim |

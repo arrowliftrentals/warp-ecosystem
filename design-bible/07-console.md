@@ -10,7 +10,7 @@
 | **Supersedes** | N/A |
 | **Superseded by** | N/A |
 | **Author** | Oz (Part A) / TBD distillation agent (Part B) |
-| **Version** | v3 |
+| **Version** | v4 |
 | **Created** | 2026-03-10 |
 | **Last Modified** | 2026-03-10 |
 
@@ -147,6 +147,10 @@
 - `docs/development/console-integration-status.md`
 - `docs/guides/startup-ux-improvements.md`
 
+**CORE/PERIPHERAL Classification** (per `DISTILLATION_PROTOCOL.md` Section 5):
+- **CORE** (20 files): `App.tsx`, `main.tsx`, `vite.config.ts`, `ConsolePage.tsx`, `ChatPanel.tsx`, `PromptInput.tsx`, `AgentResponsePanel.tsx`, `ThinkingProcess.tsx`, `NeuralArchitecture3DHost.tsx`, `NeuralArchitecture3DScene.tsx`, `MemoryView.tsx`, `GoalsView.tsx`, `TasksView.tsx`, `LearningView.tsx`, `ConsoleProvider.tsx`, `Sidebar.tsx`, `MainTabs.tsx`, `StatusBar.tsx`, `atlasClient.ts`, `atlasConsoleClient.ts`
+- **PERIPHERAL** (71 files): All remaining visualization components, system views, UI infrastructure utilities, specialized API clients, contexts, and utility files
+
 ### A.3 Context Brief
 
 **What worked in Attempt 3:**
@@ -233,3 +237,4 @@
 | v1 | 2026-03-10 | Oz | Initial scaffold — Part A pre-loaded with source manifest (80+ component files, 6 API clients, 4 contexts, 8 libs), context brief, and 5 known failure warnings including scope explosion and zero frontend tests | Created the console/frontend analysis document with file lists and known problems for the analysis agent to investigate |
 | v2 | 2026-03-10 | Oz | Added documentation standard header/footer per PROJECT_CONVENTIONS.md Section 9 | Added tracking metadata so we know who changed what and when |
 | v3 | 2026-03-10 | Oz | Added Doc ID field (`DB-V07-001`) per PROJECT_CONVENTIONS.md Section 9.4 | Added unique document number for machine searching |
+| v4 | 2026-03-10 | Oz | Added CORE/PERIPHERAL classification to A.2 Source Manifest per DISTILLATION_PROTOCOL.md Section 5 | Labeled which files agents should read in full vs. skim during Phase 1 |

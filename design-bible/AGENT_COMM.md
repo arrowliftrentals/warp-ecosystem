@@ -10,7 +10,7 @@
 | **Supersedes** | N/A |
 | **Superseded by** | N/A |
 | **Author** | Oz |
-| **Version** | v3 |
+| **Version** | v4 |
 | **Created** | 2026-03-10 |
 | **Last Modified** | 2026-03-10 |
 
@@ -112,6 +112,20 @@ These ownership decisions are made upfront to prevent predictable conflicts:
 
 ---
 
+## Integration Gate Output
+
+The integration gate agent produces its output in `design-bible/gate-output/`. See `DISTILLATION_PROTOCOL.md` Section 3 for details.
+
+**Gate output files:**
+- `gate-output/conflict-report.md` — Cross-volume conflicts with resolutions
+- `gate-output/shared-contracts.md` — Binding interface contracts for Phase 2
+- `gate-output/build-order-refined.md` — Refined build order
+- `gate-output/mva-refined.md` — Refined MVA criteria
+- `gate-output/quality-flags.md` — Per-volume quality assessment
+- `gate-output/final-review.md` — Final review after Phase 2 (created at end)
+
+---
+
 ## Modification History
 
 | Version | Date | Modified By | Summary | Laymen Summary |
@@ -119,3 +133,4 @@ These ownership decisions are made upfront to prevent predictable conflicts:
 | v1 | 2026-03-10 | Oz | Initial creation — defined ownership claim, dependency declaration, and conflict flag protocols; pre-registered 7 known boundary ownership decisions | Created the shared coordination file so agents working on different subsystems don't step on each other |
 | v2 | 2026-03-10 | Oz | Added documentation standard header/footer per PROJECT_CONVENTIONS.md Section 9 | Added tracking metadata so we know who changed what and when |
 | v3 | 2026-03-10 | Oz | Added Doc ID field (`DB-X00-003`) per PROJECT_CONVENTIONS.md Section 9.4 | Added unique document number for machine searching |
+| v4 | 2026-03-10 | Oz | Added Integration Gate Output section referencing `gate-output/` directory and 6 output files per DISTILLATION_PROTOCOL.md | Added a section pointing to where the integration agent stores its analysis results |

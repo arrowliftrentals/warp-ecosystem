@@ -10,7 +10,7 @@
 | **Supersedes** | N/A |
 | **Superseded by** | N/A |
 | **Author** | Oz (Part A) / TBD distillation agent (Part B) |
-| **Version** | v3 |
+| **Version** | v4 |
 | **Created** | 2026-03-10 |
 | **Last Modified** | 2026-03-10 |
 
@@ -114,10 +114,14 @@
 - `tests/self_modify/` (if exists)
 - `tests/sandbox/` (if exists)
 
+**CORE/PERIPHERAL Classification** (per `DISTILLATION_PROTOCOL.md` Section 5):
+- **CORE** (14 files): `modifier.py`, `verification_tracker.py`, `meta_cognitive_monitor.py`, `risk_assessment.py`, `code_analyzer.py`, `approval_automator.py`, `validation_orchestrator.py`, `design_validator.py`, `api_contract_validator.py`, `integrity_guard.py`, `exceptions.py`, sandbox: `manager.py`, `executor.py`, `docker_executor.py`
+- **PERIPHERAL** (44 files): All fix-related (6), guard files except integrity_guard (4), all pattern files (5), sandbox variants (`vm_provider.py`, `utm_provider*.py`, `screen_capture.py`, `resource_guard.py`), `meta_meta_monitor.py`, enforcement files, and all remaining
+
 ### A.3 Context Brief
 
 **What worked in Attempt 3:**
-- Sandbox execution via Docker with proposal workflow
+- Sandbox execution via Docker
 - Self-modification pipeline: propose → sandbox test → human approval → apply with rollback
 - Proposals stored in `.proposals/` directory with metadata
 - Verification tracker concept (proof of test execution) was designed and partially implemented
@@ -201,3 +205,4 @@
 | v1 | 2026-03-10 | Oz | Initial scaffold — Part A pre-loaded with source manifest (49 self-modify + 10 sandbox files, 12+ docs), context brief, and 5 known failure warnings including extreme scope explosion and validation theater risk | Created the self-modification system analysis document with file lists and known problems for the analysis agent to investigate |
 | v2 | 2026-03-10 | Oz | Added documentation standard header/footer per PROJECT_CONVENTIONS.md Section 9 | Added tracking metadata so we know who changed what and when |
 | v3 | 2026-03-10 | Oz | Added Doc ID field (`DB-V04-001`) per PROJECT_CONVENTIONS.md Section 9.4 | Added unique document number for machine searching |
+| v4 | 2026-03-10 | Oz | Added CORE/PERIPHERAL classification to A.2 source manifest per DISTILLATION_PROTOCOL.md Section 5 | Tagged files as essential vs. nice-to-have for the rebuild analysis |
