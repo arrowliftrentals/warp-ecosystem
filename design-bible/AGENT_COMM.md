@@ -1,0 +1,121 @@
+# Agent Communication Hub
+
+| Field | Value |
+|---|---|
+| **Doc ID** | `DB-X00-003` |
+| **Name** | Agent Communication Hub |
+| **Purpose** | Persistent coordination file where distillation agents register ownership claims, dependencies, and conflicts across volumes |
+| **Owner** | Design Bible / Infrastructure |
+| **Status** | `active` |
+| **Supersedes** | N/A |
+| **Superseded by** | N/A |
+| **Author** | Oz |
+| **Version** | v3 |
+| **Created** | 2026-03-10 |
+| **Last Modified** | 2026-03-10 |
+
+---
+
+## Rules
+
+### Ownership Claims
+When a distillation agent determines that a component belongs to THEIR volume, they register ownership here. If two agents claim the same component, the conflict must be resolved before either volume is submitted.
+
+Format:
+```
+CLAIM: [component name]
+OWNER: Volume [N]
+REASON: [one sentence]
+CONTESTED: [yes/no]
+```
+
+### Dependency Declarations
+When a distillation agent's subsystem needs something from another volume, they declare it here. The owning volume must define the interface; the consuming volume references it.
+
+Format:
+```
+DEPENDENCY: Volume [consumer] needs [what] from Volume [provider]
+STATUS: [pending/acknowledged/resolved]
+INTERFACE: [schema name or method signature, once resolved]
+```
+
+### Conflict Flags
+When two volumes have incompatible design decisions, flag it here for resolution.
+
+Format:
+```
+CONFLICT: [description]
+VOLUMES: [N] vs [M]
+PROPOSED RESOLUTION: [suggestion]
+STATUS: [open/resolved]
+RESOLUTION: [final decision]
+```
+
+---
+
+## Pre-Registered Ownership (Known Boundaries)
+
+These ownership decisions are made upfront to prevent predictable conflicts:
+
+### Memory Schemas
+- **Owner: Volume 1 (Memory)**
+- All Pydantic schemas for data entering/leaving memory layers are defined by Volume 1
+- Other volumes CONSUME these schemas, they do not redefine them
+- If another volume needs a new field or schema, they declare a DEPENDENCY here
+
+### Intent Validation
+- **Owner: Volume 9 (Governance)**
+- DecisionValidator and all validation gate logic belongs to Volume 9
+- Volume 2 (Orchestrator) CONSUMES validation, it does not own it
+
+### Output Governance
+- **Owner: Volume 9 (Governance)**
+- GovernedOutput, AnswerGovernor, claim extraction, evidence grounding
+- Volume 2 (Orchestrator) integrates governance into the response pipeline but does not own the governance logic
+
+### Knowledge Pipeline
+- **Owner: Volume 3 (Learning)** owns the ingestion, extraction, and synthesis pipeline
+- **Volume 5 (Intelligence)** owns the amplification layer (analogical reasoning, hypothesis generation, Socratic challenge, growth tracking)
+- **Boundary:** Volume 3 produces `RefinedKnowledge`. Volume 5 consumes it.
+- Extractors (`src/learning/extractors/`) belong to Volume 3
+- `src/intelligence/` components belong to Volume 5
+
+### Tool Registry
+- **Owner: Volume 10 (External Tools)** owns the tool infrastructure and individual tools
+- Volume 2 (Orchestrator) owns tool INVOCATION (how tools are called during conversation)
+- Volume 10 owns tool DEFINITION (what tools exist and what they do)
+
+### Voice Governance Schemas
+- **Owner: Volume 9 (Governance)** owns the governance pattern (AuthorityLevel, grounding)
+- **Volume 6 (Voice)** owns the voice-specific implementation (TTS, STT, WebRTC)
+- ApprovedUtterance is superseded by GovernedOutput in the rebuild; Volume 9 defines the unified schema
+
+### API Endpoints
+- **Owner: Volume 8 (API)** owns the server, routing, middleware, and endpoint registration
+- Each subsystem volume defines WHAT endpoints their subsystem needs
+- Volume 8 defines HOW those endpoints are implemented (FastAPI patterns, error responses, etc.)
+
+---
+
+## Ownership Claims (Agent-Registered)
+*[Distillation agents register claims here during their deep dives]*
+
+---
+
+## Dependency Declarations (Agent-Registered)
+*[Distillation agents declare cross-volume dependencies here]*
+
+---
+
+## Conflict Flags (Agent-Registered)
+*[Distillation agents flag conflicts here for resolution]*
+
+---
+
+## Modification History
+
+| Version | Date | Modified By | Summary | Laymen Summary |
+|---|---|---|---|---|
+| v1 | 2026-03-10 | Oz | Initial creation — defined ownership claim, dependency declaration, and conflict flag protocols; pre-registered 7 known boundary ownership decisions | Created the shared coordination file so agents working on different subsystems don't step on each other |
+| v2 | 2026-03-10 | Oz | Added documentation standard header/footer per PROJECT_CONVENTIONS.md Section 9 | Added tracking metadata so we know who changed what and when |
+| v3 | 2026-03-10 | Oz | Added Doc ID field (`DB-X00-003`) per PROJECT_CONVENTIONS.md Section 9.4 | Added unique document number for machine searching |
