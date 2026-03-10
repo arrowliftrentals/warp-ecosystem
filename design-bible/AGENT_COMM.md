@@ -10,7 +10,7 @@
 | **Supersedes** | N/A |
 | **Superseded by** | N/A |
 | **Author** | Oz |
-| **Version** | v4 |
+| **Version** | v5 |
 | **Created** | 2026-03-10 |
 | **Last Modified** | 2026-03-10 |
 
@@ -98,17 +98,115 @@ These ownership decisions are made upfront to prevent predictable conflicts:
 ---
 
 ## Ownership Claims (Agent-Registered)
-*[Distillation agents register claims here during their deep dives]*
+
+```
+CLAIM: SelfModifier pipeline (propose > sandbox > verify > approve > apply)
+OWNER: Volume 4
+REASON: Core self-modification lifecycle orchestrating CodeChange to ImprovementProposal with full sandbox testing.
+CONTESTED: no
+```
+
+```
+CLAIM: VerificationTracker (HMAC-SHA256 cryptographic proof of test execution)
+OWNER: Volume 4
+REASON: Enforcement arm of P4 (validation must be real). Signs command output, stores claims in L4.
+CONTESTED: no
+```
+
+```
+CLAIM: MetaCognitiveMonitor (validation theater detection)
+OWNER: Volume 4
+REASON: 7 heuristic checks for validation theater patterns. Operates on proposals pre-approval.
+CONTESTED: no
+```
+
+```
+CLAIM: RiskAssessor + ApprovalAutomator (risk scoring and graduated approval)
+OWNER: Volume 4
+REASON: 7-gate risk scoring with auto-approve (LOW risk only) / human escalation.
+CONTESTED: no
+```
+
+```
+CLAIM: ValidationOrchestrator + APIContractValidator (multi-stage code validation)
+OWNER: Volume 4
+REASON: 5-stage validation chain (syntax > imports > API contracts > patterns > intent).
+CONTESTED: no
+```
+
+```
+CLAIM: SandboxManager + SandboxExecutor + DockerProvider + DockerExecutor (sandbox layer)
+OWNER: Volume 4
+REASON: Docker-based isolated code execution with snapshot-and-rollback.
+CONTESTED: no
+```
+
+```
+CLAIM: IntegrityGuard (SHA-256 tamper detection)
+OWNER: Volume 4
+REASON: Critical file hash verification at startup. Detects unauthorized modification of validation code.
+CONTESTED: no
+```
 
 ---
 
 ## Dependency Declarations (Agent-Registered)
-*[Distillation agents declare cross-volume dependencies here]*
+
+```
+DEPENDENCY: Volume 4 needs MemoryManager.l4 (store_fact, query_facts) from Volume 1
+STATUS: pending
+INTERFACE: store_fact(content, source, confidence, metadata) -> str; query_facts(query, min_confidence, limit) -> list[DeclarativeFact]
+```
+
+```
+DEPENDENCY: Volume 4 needs CommandEvidence/ValidationClaim Pydantic schemas from Volume 1
+STATUS: pending
+INTERFACE: CommandEvidence(BaseModel), ValidationClaim(BaseModel), ValidationClaimType(str, Enum)
+```
+
+```
+DEPENDENCY: Volume 4 needs DecisionValidator.validate_intent() from Volume 9
+STATUS: pending
+INTERFACE: validate_intent(intent, context) -> ValidationResult
+```
+
+```
+DEPENDENCY: Volume 4 needs API endpoint registration from Volume 8
+STATUS: pending
+INTERFACE: POST /v1/proposals, GET /v1/proposals/{id}, POST /v1/sandbox/execute
+```
+
+```
+DEPENDENCY: Volume 2 needs SelfModifier.propose_improvement() from Volume 4
+STATUS: pending
+INTERFACE: async propose_improvement(title, description, changes, progress_callback) -> ImprovementProposal
+```
+
+```
+DEPENDENCY: Volume 3 needs proposal outcomes from Volume 4
+STATUS: pending
+INTERFACE: ImprovementProposal with status, risk_assessment, ValidationClaim records in L4
+```
 
 ---
 
 ## Conflict Flags (Agent-Registered)
-*[Distillation agents flag conflicts here for resolution]*
+
+```
+CONFLICT: Verification schemas ownership
+VOLUMES: 1 vs 4
+PROPOSED RESOLUTION: Volume 1 owns schemas (data entering memory). Volume 4 owns behavioral interface (sign, verify, claim).
+STATUS: open
+RESOLUTION: [awaiting gate review]
+```
+
+```
+CONFLICT: RemediationEngine overlap
+VOLUMES: 4 vs 5 vs 9
+PROPOSED RESOLUTION: RemediationEngine is self-modification. Should flow through Volume 4 pipeline. Volume 5 owns diagnostics. Volume 4 owns remediation.
+STATUS: open
+RESOLUTION: [awaiting gate review]
+```
 
 ---
 
