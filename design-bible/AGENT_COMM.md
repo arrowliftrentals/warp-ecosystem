@@ -10,7 +10,7 @@
 | **Supersedes** | N/A |
 | **Superseded by** | N/A |
 | **Author** | Oz |
-| **Version** | v4 |
+| **Version** | v5 |
 | **Created** | 2026-03-10 |
 | **Last Modified** | 2026-03-10 |
 
@@ -98,17 +98,80 @@ These ownership decisions are made upfront to prevent predictable conflicts:
 ---
 
 ## Ownership Claims (Agent-Registered)
-*[Distillation agents register claims here during their deep dives]*
+
+```
+CLAIM: Governance schemas (GovernedOutput, ExtractedClaim, EvidenceItem, EvidenceContract, ApprovedUtterance, AuthorityLevel, OutputPhase, ClaimType, ClaimStatus)
+OWNER: Volume 9 (currently in src/memory/schemas.py, must move to Volume 9 in rebuild)
+REASON: Output/voice governance schemas owned by Volume 9 per pre-registered boundary; currently co-located in memory schemas file.
+CONTESTED: no
+```
+
+```
+CLAIM: APEX schemas (PromptStrategy, PromptMetrics, TaskOutcome, TurnAnalysis, PromptStrategyStatus)
+OWNER: Volume 3/5 boundary (currently in src/memory/schemas.py, must move in rebuild)
+REASON: Prompt optimization schemas belong to the learning/intelligence boundary, not memory.
+CONTESTED: no
+```
+
+```
+CLAIM: BERT classification schema (BertClassificationResult)
+OWNER: Volume 2 (currently in src/memory/schemas.py, must move in rebuild)
+REASON: Intent classification belongs to the orchestrator pipeline, not memory.
+CONTESTED: no
+```
+
+```
+CLAIM: Librarian schemas (LibrarianResponse, APIDefinition, SchemaDefinition, CodeReference, IndexResult, CoverageStats, DriftReport, ImpactReport)
+OWNER: Volume 5 (currently in src/memory/schemas.py, must move in rebuild)
+REASON: Knowledge librarian is an intelligence subsystem; schemas belong with it.
+CONTESTED: no
+```
+
+```
+CLAIM: Meta-assessment schemas (JarvisBenchmark, Scorecard, BenchmarkEntry, RepoStats, MarketData, ComparativeAnalysis, etc.)
+OWNER: KILL - not part of rebuild MVA
+REASON: Meta-assessment/benchmarking schemas have no consumer in the rebuild pipeline. Remove from codebase.
+CONTESTED: no
+```
 
 ---
 
 ## Dependency Declarations (Agent-Registered)
-*[Distillation agents declare cross-volume dependencies here]*
+
+```
+DEPENDENCY: Volume 2 (Orchestrator) needs MemoryManager.assemble_context() from Volume 1
+STATUS: pending
+INTERFACE: assemble_context(conversation_id: str, user_query: Optional[str], max_messages: int = 10, max_facts: int = 5, max_episodes: int = 3, max_semantic: int = 5) -> Dict[str, Any]
+```
+
+```
+DEPENDENCY: Volume 3 (Learning) needs L4.search_facts(), L5 procedural store, L3.store_episode() from Volume 1
+STATUS: pending
+INTERFACE: L4DeclarativeMemory.search_facts(query, limit) -> list[dict]; L5ProceduralMemory.store_skill(Skill); L3EpisodicMemory.store_episode(Episode)
+```
+
+```
+DEPENDENCY: Volume 8 (API) needs MemoryManager.get_stats(), MemoryManager.get_recent_conversations() from Volume 1
+STATUS: pending
+INTERFACE: get_stats() -> Dict[str, Any]; get_recent_conversations(hours: int, limit: int) -> List[Dict[str, Any]]
+```
+
+```
+DEPENDENCY: Volume 9 (Governance) needs L4.search_facts() for evidence grounding from Volume 1
+STATUS: pending
+INTERFACE: L4DeclarativeMemory.search_facts(query: str, limit: int) -> list[dict]
+```
+
+```
+DEPENDENCY: Volume 1 (Memory) needs shared infrastructure (shared/errors.py, shared/config.py, shared/logging.py) from cross-cutting infra
+STATUS: pending
+INTERFACE: Error hierarchy from shared/errors.py; config object from shared/config.py; structured logging from shared/logging.py
+```
 
 ---
 
 ## Conflict Flags (Agent-Registered)
-*[Distillation agents flag conflicts here for resolution]*
+*No new conflicts identified by Volume 1 distillation. Schema co-location in schemas.py is a known migration task, not a cross-volume disagreement.*
 
 ---
 
@@ -134,3 +197,4 @@ The integration gate agent produces its output in `design-bible/gate-output/`. S
 | v2 | 2026-03-10 | Oz | Added documentation standard header/footer per PROJECT_CONVENTIONS.md Section 9 | Added tracking metadata so we know who changed what and when |
 | v3 | 2026-03-10 | Oz | Added Doc ID field (`DB-X00-003`) per PROJECT_CONVENTIONS.md Section 9.4 | Added unique document number for machine searching |
 | v4 | 2026-03-10 | Oz | Added Integration Gate Output section referencing `gate-output/` directory and 6 output files per DISTILLATION_PROTOCOL.md | Added a section pointing to where the integration agent stores its analysis results |
+| v5 | 2026-03-10 | Distillation Agent V1 | Phase 1: Registered 5 ownership claims (governance schemas->V9, APEX schemas->V3/5, BERT schema->V2, librarian schemas->V5, meta-assessment schemas->KILL), 5 dependency declarations, 0 new conflict flags | Volume 1 agent identified schema families that must move out of memory during rebuild and documented cross-volume dependencies |
