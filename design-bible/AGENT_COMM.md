@@ -10,7 +10,7 @@
 | **Supersedes** | N/A |
 | **Superseded by** | N/A |
 | **Author** | Oz |
-| **Version** | v4 |
+|| **Version** | v5 |
 | **Created** | 2026-03-10 |
 | **Last Modified** | 2026-03-10 |
 
@@ -98,17 +98,95 @@ These ownership decisions are made upfront to prevent predictable conflicts:
 ---
 
 ## Ownership Claims (Agent-Registered)
-*[Distillation agents register claims here during their deep dives]*
+
+```
+CLAIM: FastAPI app factory, startup/shutdown lifecycle, middleware stack
+OWNER: Volume 8
+REASON: Server creation, middleware registration, and lifespan management are API infrastructure concerns.
+CONTESTED: no
+```
+
+```
+CLAIM: Error taxonomy (AtlasError hierarchy, ErrorCategory, ErrorSeverity)
+OWNER: Volume 8 (shared/errors.py)
+REASON: The error hierarchy is cross-cutting infrastructure consumed by every subsystem. Volume 8 defines it; others import it.
+CONTESTED: no
+```
+
+```
+CLAIM: Configuration system (AtlasConfig, pydantic-settings)
+OWNER: Volume 8 (shared/config.py)
+REASON: Server configuration, feature flags, and env-var loading are infrastructure concerns.
+CONTESTED: no
+```
+
+```
+CLAIM: API request/response Pydantic schemas for chat endpoint (ChatRequest, ChatResponse, EvidenceRef)
+OWNER: Volume 8 (contracts/api_schemas.py)
+REASON: Cross-boundary schemas shared with Console (Volume 7) live in contracts/. Volume 8 defines the HTTP contract; Volume 2 defines the orchestrator interface.
+CONTESTED: no
+```
+
+```
+CLAIM: ErrorResponse schema (structured error JSON body)
+OWNER: Volume 8
+REASON: HTTP error formatting is an API-layer concern.
+CONTESTED: no
+```
 
 ---
 
 ## Dependency Declarations (Agent-Registered)
-*[Distillation agents declare cross-volume dependencies here]*
+
+```
+DEPENDENCY: Volume 8 needs Orchestrator.process_command() and Orchestrator.process_command_streaming() from Volume 2
+STATUS: pending
+INTERFACE: async def process_command(command: str, device_id: str, conversation_id: str | None) -> dict; async generator process_command_streaming(...) -> AsyncIterator[StreamEvent]
+```
+
+```
+DEPENDENCY: Volume 8 needs MemoryManager.get_stats(), MemoryManager.get_recent_conversations() from Volume 1
+STATUS: pending
+INTERFACE: To be defined by Volume 1 in B.3
+```
+
+```
+DEPENDENCY: Volume 8 needs GovernedOutput / output governance gate from Volume 9
+STATUS: pending
+INTERFACE: ChatResponse.governed field + EvidenceRef list depend on Volume 9's governance output schema
+```
+
+```
+DEPENDENCY: Volume 8 needs structlog configured logging from shared/logging.py (cross-cutting, no single volume owner)
+STATUS: pending
+INTERFACE: from atlas.shared.logging import log (structlog.BoundLogger)
+```
+
+```
+DEPENDENCY: Volume 7 (Console) needs the ChatRequest/ChatResponse/ErrorResponse schemas from Volume 8 contracts/api_schemas.py for TypeScript type generation
+STATUS: pending
+INTERFACE: Pydantic models in contracts/api_schemas.py → generated TypeScript types via scripts/generate_contracts.sh
+```
 
 ---
 
 ## Conflict Flags (Agent-Registered)
-*[Distillation agents flag conflicts here for resolution]*
+
+```
+CONFLICT: Error taxonomy location — PROJECT_CONVENTIONS.md Section 6 specifies shared/errors.py, but Attempt 3's errors.py is at src/errors.py (top-level). The rebuild MUST use shared/errors.py per conventions.
+VOLUMES: 8 (owns errors) vs all consumers
+PROPOSED RESOLUTION: Follow PROJECT_CONVENTIONS.md: atlas/shared/errors.py. No conflict expected — just documenting the relocation.
+STATUS: resolved
+RESOLUTION: shared/errors.py per PROJECT_CONVENTIONS.md Section 6.
+```
+
+```
+CONFLICT: Chat endpoint request field naming — Attempt 3 uses 'query' in ConsoleQueryRequest. The rebuild must preserve this to maintain Console compatibility. Volume 2 (Orchestrator) should accept 'query' as the input field name, not 'message' or 'command'.
+VOLUMES: 8 vs 2 vs 7
+PROPOSED RESOLUTION: ChatRequest.query is the canonical field name. Orchestrator accepts 'query'. Console sends 'query'. Already aligned with Attempt 3.
+STATUS: resolved
+RESOLUTION: Field name is 'query' everywhere.
+```
 
 ---
 
@@ -133,4 +211,5 @@ The integration gate agent produces its output in `design-bible/gate-output/`. S
 | v1 | 2026-03-10 | Oz | Initial creation — defined ownership claim, dependency declaration, and conflict flag protocols; pre-registered 7 known boundary ownership decisions | Created the shared coordination file so agents working on different subsystems don't step on each other |
 | v2 | 2026-03-10 | Oz | Added documentation standard header/footer per PROJECT_CONVENTIONS.md Section 9 | Added tracking metadata so we know who changed what and when |
 | v3 | 2026-03-10 | Oz | Added Doc ID field (`DB-X00-003`) per PROJECT_CONVENTIONS.md Section 9.4 | Added unique document number for machine searching |
-| v4 | 2026-03-10 | Oz | Added Integration Gate Output section referencing `gate-output/` directory and 6 output files per DISTILLATION_PROTOCOL.md | Added a section pointing to where the integration agent stores its analysis results |
+|| v4 | 2026-03-10 | Oz | Added Integration Gate Output section referencing `gate-output/` directory and 6 output files per DISTILLATION_PROTOCOL.md | Added a section pointing to where the integration agent stores its analysis results |
+|| v5 | 2026-03-10 | Distillation Agent V8 | Phase 1: Registered 5 ownership claims (server factory, error taxonomy, config, chat schemas, error response), 5 dependency declarations (orchestrator, memory, governance, logging, console types), 2 conflict flags (error location resolved, query field name resolved) | Volume 8 agent claimed its territory and documented what it needs from other subsystems |
