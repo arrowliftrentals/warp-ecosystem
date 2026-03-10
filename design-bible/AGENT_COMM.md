@@ -116,6 +116,9 @@ REASON: Server creation, middleware registration, and lifespan management are AP
 CLAIM: DecisionValidator (intent/action/tool validation gate)
 OWNER: Volume 9
 REASON: Central validation checkpoint for all intents, BERT classifications, LLM actions, tool executions, and external data. Produces ValidationDecision (SAFE/UNSAFE/NEEDS_REVIEW/NEEDS_USER_INPUT). Aligns with pre-registered Vol 9 ownership of Intent Validation.
+CLAIM: ToolRegistry (registration, lookup, schema export, execution orchestration)
+OWNER: Volume 10
+REASON: Central tool infrastructure per pre-registered boundary — Volume 10 owns DEFINITION, Volume 2 owns INVOCATION.
 CONTESTED: no
 ```
 
@@ -135,6 +138,9 @@ REASON: The error hierarchy is cross-cutting infrastructure consumed by every su
 CLAIM: AnswerGovernor (output governance pipeline, ADR-0031)
 OWNER: Volume 9
 REASON: Governs all LLM-generated text via extract → ground → verify → downgrade → scrub → package pipeline. Produces GovernedOutput — single egress schema. Aligns with pre-registered Vol 9 ownership of Output Governance.
+CLAIM: ToolDefinition dataclass and tool_schemas.py Pydantic parameter/result schemas
+OWNER: Volume 10
+REASON: Boundary validation schemas for tool inputs and outputs live with tool definitions.
 CONTESTED: no
 ```
 
@@ -154,6 +160,9 @@ REASON: Server configuration, feature flags, and env-var loading are infrastruct
 CLAIM: EvidenceStore + EvidenceContractRegistry (evidence grounding)
 OWNER: Volume 9
 REASON: Per-request verbatim tool result store with SHA256 integrity. EvidenceContractRegistry defines required evidence per intent pattern. Core dependency for claim verification in AnswerGovernor.
+CLAIM: Core tool handlers (FileTools, GitTools, MemoryTools, ConversationTools, SystemTools, WebTools)
+OWNER: Volume 10
+REASON: Tool implementation classes and their handler methods. Volume 10 owns what each tool does.
 CONTESTED: no
 ```
 
@@ -173,6 +182,9 @@ REASON: Cross-boundary schemas shared with Console (Volume 7) live in contracts/
 CLAIM: ConfidenceModel (evidence-based confidence scoring)
 OWNER: Volume 9
 REASON: Computes confidence from evidence coverage, claim support ratio, and evidence freshness. Replaces self-reported LLM confidence. Internal to governance pipeline.
+CLAIM: STEM computational backends (backends/mathematics.py, science.py, engineering.py, data_science.py, additive_manufacturing.py)
+OWNER: Volume 10
+REASON: ADR-0030 computation-first backends are tool-layer implementation with no orchestrator dependency.
 CONTESTED: no
 ```
 
@@ -189,6 +201,9 @@ REASON: 5-stage validation chain (syntax > imports > API contracts > patterns > 
 CLAIM: ErrorResponse schema (structured error JSON body)
 OWNER: Volume 8
 REASON: HTTP error formatting is an API-layer concern.
+CLAIM: Security/pentest tool stack (container_manager, engagement_scope, external_tool_manifest, external_tool_discovery, spec_generator, arsenal)
+OWNER: Volume 10
+REASON: External tool governance and discovery infrastructure per ADR-0028/0029.
 CONTESTED: no
 ```
 
@@ -788,6 +803,8 @@ STATUS: open
 RESOLUTION: [awaiting gate review]
 ```
 
+*No new conflicts flagged by Volume 10 distillation. All ownership boundaries align with pre-registered decisions.*
+
 ```
 CONFLICT: TTS/STT voice logic inlined in Console ChatPanel.tsx (Vol 7) but owned by Vol 6
 VOLUMES: 7 vs 6
@@ -882,3 +899,6 @@ The integration gate agent produces its output in `design-bible/gate-output/`. S
 | v5 | 2026-03-10 | Vol-07 Distillation Agent | 4 ownership claims (Console SPA, TS types, TTS/STT client contested with Vol 6, session management), 8 dependency declarations (SSE format, chat schema, sessions, memory, health, WebSocket, type codegen, GovernedOutput from Vol 1/2/8/9), 3 conflict flags (TTS/STT Vol 7 vs 6, endpoint prefix Vol 7 vs 8, codegen ownership Vol 7 vs 8 vs 9) | Console agent registered what it owns, what it needs from other subsystems, and flagged three cross-volume disagreements |
 | v5 | 2026-03-10 | Vol-07 Distillation Agent | 4 ownership claims (Console SPA, TS types, TTS/STT client contested with Vol 6, session management), 8 dependency declarations (SSE format, chat schema, sessions, memory, health, WebSocket, type codegen, GovernedOutput from Vol 1/2/8/9), 3 conflict flags (TTS/STT Vol 7 vs 6, endpoint prefix Vol 7 vs 8, codegen ownership Vol 7 vs 8 vs 9) | Console agent registered what it owns, what it needs from other subsystems, and flagged three cross-volume disagreements |
 | v5 | 2026-03-10 | Distillation Agent V9 | Phase 1: Registered 5 ownership claims (DecisionValidator, AnswerGovernor, EvidenceStore+EvidenceContractRegistry, ConfidenceModel, ClaimExtractor), 8 dependency declarations (governance schemas from Vol 1, tool results from Vol 2, BERT from Vol 2, AnswerGovernor consumed by Vol 2, DecisionValidator consumed by Vol 2 and Vol 4, GovernedOutput consumed by Vol 6, failure patterns from Vol 3), 3 conflict flags (governance schema location Vol 1 vs 9, GovernedOutput supersedes ApprovedUtterance, enforcement files belong to Vol 4) | Volume 9 agent claimed governance pipeline components; documented cross-volume dependencies and resolved schema/ownership conflicts |
+|| v4 | 2026-03-10 | Oz | Added Integration Gate Output section referencing `gate-output/` directory and 6 output files per DISTILLATION_PROTOCOL.md | Added a section pointing to where the integration agent stores its analysis results |
+|| v5 | 2026-03-10 | Distillation Agent V10 | Phase 1: Registered 7 ownership claims (ToolRegistry, tool schemas, core handlers, STEM backends, security/pentest stack, screen control, external integrations), 4 dependency declarations (MemoryManager from V1, DecisionValidator from V9, ToolRegistry execution to V2, tool introspection to V8). No new conflicts. | Volume 10 agent claimed all tool definitions, registries, and capability implementations; documented cross-volume interface needs |
+| v6 | 2026-03-10 | Vol-07 Distillation Agent | 4 ownership claims (Console SPA, TS types, TTS/STT client contested with Vol 6, session management), 8 dependency declarations (SSE format, chat schema, sessions, memory, health, WebSocket, type codegen, GovernedOutput from Vol 1/2/8/9), 3 conflict flags (TTS/STT Vol 7 vs 6, endpoint prefix Vol 7 vs 8, codegen ownership Vol 7 vs 8 vs 9) | Console agent registered what it owns, what it needs from other subsystems, and flagged three cross-volume disagreements |
