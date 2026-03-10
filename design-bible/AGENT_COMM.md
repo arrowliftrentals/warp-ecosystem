@@ -10,7 +10,7 @@
 | **Supersedes** | N/A |
 | **Superseded by** | N/A |
 | **Author** | Oz |
-| **Version** | v4 |
+| **Version** | v5 |
 | **Created** | 2026-03-10 |
 | **Last Modified** | 2026-03-10 |
 
@@ -98,17 +98,88 @@ These ownership decisions are made upfront to prevent predictable conflicts:
 ---
 
 ## Ownership Claims (Agent-Registered)
-*[Distillation agents register claims here during their deep dives]*
+
+```
+CLAIM: ToolRegistry (registration, lookup, schema export, execution orchestration)
+OWNER: Volume 10
+REASON: Central tool infrastructure per pre-registered boundary — Volume 10 owns DEFINITION, Volume 2 owns INVOCATION.
+CONTESTED: no
+```
+
+```
+CLAIM: ToolDefinition dataclass and tool_schemas.py Pydantic parameter/result schemas
+OWNER: Volume 10
+REASON: Boundary validation schemas for tool inputs and outputs live with tool definitions.
+CONTESTED: no
+```
+
+```
+CLAIM: Core tool handlers (FileTools, GitTools, MemoryTools, ConversationTools, SystemTools, WebTools)
+OWNER: Volume 10
+REASON: Tool implementation classes and their handler methods. Volume 10 owns what each tool does.
+CONTESTED: no
+```
+
+```
+CLAIM: STEM computational backends (backends/mathematics.py, science.py, engineering.py, data_science.py, additive_manufacturing.py)
+OWNER: Volume 10
+REASON: ADR-0030 computation-first backends are tool-layer implementation with no orchestrator dependency.
+CONTESTED: no
+```
+
+```
+CLAIM: Security/pentest tool stack (container_manager, engagement_scope, external_tool_manifest, external_tool_discovery, spec_generator, arsenal)
+OWNER: Volume 10
+REASON: External tool governance and discovery infrastructure per ADR-0028/0029.
+CONTESTED: no
+```
+
+```
+CLAIM: Screen control subsystem (accessibility.py, controller.py, app_launcher.py)
+OWNER: Volume 10
+REASON: macOS UI automation is an external capability surface, not orchestrator logic.
+CONTESTED: no
+```
+
+```
+CLAIM: External integration tools (email_tools, calendar_tools, messaging_tools, home_tools, voice_tools, screen_tools)
+OWNER: Volume 10
+REASON: Integration wrappers exposing external service APIs as tool handlers.
+CONTESTED: no
+```
 
 ---
 
 ## Dependency Declarations (Agent-Registered)
-*[Distillation agents declare cross-volume dependencies here]*
+
+```
+DEPENDENCY: Volume 10 needs MemoryManager interface (L1-L10 access) from Volume 1
+STATUS: pending
+INTERFACE: MemoryManager with layer accessors (.l1 through .l10), search methods, get_stats(), get_consolidation_health(), get_safeguards_status()
+```
+
+```
+DEPENDENCY: Volume 10 needs DecisionValidator.validate(command, context) from Volume 9
+STATUS: pending
+INTERFACE: DecisionValidator.validate(command: str, context: dict | None) -> ValidationResult with is_safe(), blocked_reasons, requires_confirmation
+```
+
+```
+DEPENDENCY: Volume 2 (Orchestrator) needs ToolRegistry.execute() and ToolRegistry.get_openai_schema_for_query() from Volume 10
+STATUS: pending
+INTERFACE: ToolRegistry.execute(tool_name, arguments, context) -> ToolResult; ToolRegistry.get_openai_schema_for_query(query, max_tools) -> list[dict]
+```
+
+```
+DEPENDENCY: Volume 8 (API) needs tool introspection surface from Volume 10
+STATUS: pending
+INTERFACE: ToolRegistry.list_tools() -> list[str]; SystemTools.get_tool_list(category) -> dict
+```
 
 ---
 
 ## Conflict Flags (Agent-Registered)
-*[Distillation agents flag conflicts here for resolution]*
+*No new conflicts flagged by Volume 10 distillation. All ownership boundaries align with pre-registered decisions.*
 
 ---
 
@@ -133,4 +204,5 @@ The integration gate agent produces its output in `design-bible/gate-output/`. S
 | v1 | 2026-03-10 | Oz | Initial creation — defined ownership claim, dependency declaration, and conflict flag protocols; pre-registered 7 known boundary ownership decisions | Created the shared coordination file so agents working on different subsystems don't step on each other |
 | v2 | 2026-03-10 | Oz | Added documentation standard header/footer per PROJECT_CONVENTIONS.md Section 9 | Added tracking metadata so we know who changed what and when |
 | v3 | 2026-03-10 | Oz | Added Doc ID field (`DB-X00-003`) per PROJECT_CONVENTIONS.md Section 9.4 | Added unique document number for machine searching |
-| v4 | 2026-03-10 | Oz | Added Integration Gate Output section referencing `gate-output/` directory and 6 output files per DISTILLATION_PROTOCOL.md | Added a section pointing to where the integration agent stores its analysis results |
+|| v4 | 2026-03-10 | Oz | Added Integration Gate Output section referencing `gate-output/` directory and 6 output files per DISTILLATION_PROTOCOL.md | Added a section pointing to where the integration agent stores its analysis results |
+|| v5 | 2026-03-10 | Distillation Agent V10 | Phase 1: Registered 7 ownership claims (ToolRegistry, tool schemas, core handlers, STEM backends, security/pentest stack, screen control, external integrations), 4 dependency declarations (MemoryManager from V1, DecisionValidator from V9, ToolRegistry execution to V2, tool introspection to V8). No new conflicts. | Volume 10 agent claimed all tool definitions, registries, and capability implementations; documented cross-volume interface needs |
