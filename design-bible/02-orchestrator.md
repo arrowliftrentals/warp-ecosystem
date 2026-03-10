@@ -6,10 +6,10 @@
 | **Name** | Volume 2: Orchestrator & Conversation Loop |
 | **Purpose** | Design specification for the central conversation engine — intent parsing, routing, response generation, and personality |
 | **Owner** | Design Bible / Volume 2 |
-| **Status** | `draft` (scaffold — Part A pre-loaded, Part B awaiting distillation agent) |
+| **Status** | `phase-1-complete` |
 | **Supersedes** | N/A |
 | **Superseded by** | N/A |
-| **Author** | Oz (Part A) / TBD distillation agent (Part B) |
+| **Author** | Oz (Part A) / Distillation Agent V2 (Part B) |
 | **Version** | v5 |
 | **Created** | 2026-03-10 |
 | **Last Modified** | 2026-03-10 |

@@ -6,11 +6,11 @@
 | **Name** | Volume 4: Self-Modification & Sandbox |
 | **Purpose** | Design specification for the self-improvement pipeline — propose, test, validate, and apply code changes with sandbox safety |
 | **Owner** | Design Bible / Volume 4 |
-| **Status** | `draft` (scaffold — Part A pre-loaded, Part B awaiting distillation agent) |
+| **Status** | `phase-1-complete` |
 | **Supersedes** | N/A |
 | **Superseded by** | N/A |
-| **Author** | Oz (Part A) / TBD distillation agent (Part B) |
-| **Version** | v4 |
+| **Author** | Oz (Part A) / Distillation Agent V4 (Part B) |
+| **Version** | v5 |
 | **Created** | 2026-03-10 |
 | **Last Modified** | 2026-03-10 |
 
@@ -760,3 +760,4 @@ macOS screenshot capture. Not related to self-modification. If needed, belongs i
 | v2 | 2026-03-10 | Oz | Added documentation standard header/footer per PROJECT_CONVENTIONS.md Section 9 | Added tracking metadata so we know who changed what and when |
 | v3 | 2026-03-10 | Oz | Added Doc ID field (`DB-V04-001`) per PROJECT_CONVENTIONS.md Section 9.4 | Added unique document number for machine searching |
 | v4 | 2026-03-10 | Oz | Added CORE/PERIPHERAL classification to A.2 source manifest per DISTILLATION_PROTOCOL.md Section 5 | Tagged files as essential vs. nice-to-have for the rebuild analysis |
+| v5 | 2026-03-10 | Distillation Agent V4 | Phase 1: Filled B.1-B.4. B.1 defines proposal pipeline and sandbox layer. B.2 has 5-component architecture (SelfModifier, VerificationTracker, MetaCognitiveMonitor, RiskAssessor/ApprovalAutomator, ValidationOrchestrator) plus sandbox layer. B.3 has 6 interface contracts. B.4 triages 58 files (14 REBUILD, 12 DEFER, 32 KILL — 79% reduction). Registered 8 ownership claims, 5 dependency declarations, 1 conflict flag in AGENT_COMM. | The self-modification agent analyzed all 58 files, kept 14 essential ones, deferred 12, and eliminated 32 as unnecessary bloat |

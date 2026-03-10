@@ -4,16 +4,21 @@
 |---|---|
 | **Doc ID** | `DB-X00-003` |
 | **Name** | Agent Communication Hub |
-| **Purpose** | Persistent coordination file where distillation agents register ownership claims, dependencies, and conflicts across volumes |
+| **Purpose** | Consolidated view of ownership claims, dependencies, and conflicts across volumes. **READ-ONLY for distillation agents.** |
 | **Owner** | Design Bible / Infrastructure |
 | **Status** | `active` |
 | **Supersedes** | N/A |
 | **Superseded by** | N/A |
 | **Author** | Oz |
-| **Version** | v5 |
-|| **Version** | v5 |
+| **Version** | v6 |
 | **Created** | 2026-03-10 |
 | **Last Modified** | 2026-03-10 |
+
+> **⚠️ AGENT WRITE POLICY (effective Phase 2):**
+> Distillation agents MUST NOT edit this file directly.
+> Instead, write to your per-volume file: `design-bible/agent-comm/vol-XX.md`
+> The Integration Gate agent consolidates per-volume files into this document after each phase.
+> This file remains the **read-only consolidated view** for cross-volume reference.
 
 ---
 

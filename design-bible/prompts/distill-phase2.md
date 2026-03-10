@@ -27,7 +27,8 @@ This is **Phase 2 (Deep Dive)**. B.1-B.4 are already filled from Phase 1. You co
 5. Read `{{CONTRACTS_PATH}}` (`design-bible/gate-output/shared-contracts.md`) — **BINDING.** Your design must conform to these contracts.
 6. Read `design-bible/gate-output/conflict-report.md` — check for resolutions affecting your volume
 7. Read `design-bible/gate-output/quality-flags.md` — check for rework items flagged against your volume
-8. Read ALL source files in A.2 in full (CORE and PERIPHERAL). Use multi-pass if needed:
+8. Read `design-bible/agent-comm/vol-{{VOLUME_NUMBER_PADDED}}.md` — your volume's existing claims, dependencies, and conflict acknowledgements
+9. Read ALL source files in A.2 in full (CORE and PERIPHERAL). Use multi-pass if needed:
    - Pass 1: CORE files + all schemas/interfaces → draft B.5-B.10
    - Pass 2: PERIPHERAL files → refine B.5-B.10, complete B.11-B.13
 
@@ -54,7 +55,8 @@ Fill out B.5 through B.13:
 - Volume 0 principles override your judgment.
 - Be specific. A programming agent builds from this volume + Volume 0 alone, with zero questions.
 - Do not copy code. Describe design intent, interfaces, and behavior.
-- Update `AGENT_COMM.md` with any new claims or dependencies discovered during deep dive.
+- Update `design-bible/agent-comm/vol-{{VOLUME_NUMBER_PADDED}}.md` with any new claims or dependencies discovered during deep dive. Do **NOT** edit `AGENT_COMM.md` directly — it is read-only for distillation agents.
+- If shared contracts from `{{CONTRACTS_PATH}}` conflict with your design, flag it in your per-volume agent-comm file, not in `AGENT_COMM.md`.
 
 ---
 
