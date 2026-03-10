@@ -6,7 +6,7 @@
 | **Name** | Volume 8: API & Infrastructure |
 | **Purpose** | Design specification for the server, routing, middleware, error handling, configuration, startup, and concurrency model |
 | **Owner** | Design Bible / Volume 8 |
-| **Status** | `phase-1-complete` |
+| **Status** | `draft` |
 | **Supersedes** | N/A |
 | **Superseded by** | N/A |
 | **Author** | Oz (Part A) / Distillation Agent V8 (Part B) |

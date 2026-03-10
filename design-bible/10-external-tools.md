@@ -6,7 +6,7 @@
 | **Name** | Volume 10: External Tools & Capabilities |
 | **Purpose** | Design specification for the tool ecosystem — file ops, git, web, STEM computation, security tools, screen control, and tool registry |
 | **Owner** | Design Bible / Volume 10 |
-| **Status** | `phase-1-complete` |
+| **Status** | `draft` |
 | **Supersedes** | N/A |
 | **Superseded by** | N/A |
 | **Author** | Oz (Part A) / Distillation Agent V10 (Part B) |

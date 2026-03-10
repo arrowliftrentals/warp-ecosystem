@@ -6,7 +6,7 @@
 | **Name** | Volume 4: Self-Modification & Sandbox |
 | **Purpose** | Design specification for the self-improvement pipeline — propose, test, validate, and apply code changes with sandbox safety |
 | **Owner** | Design Bible / Volume 4 |
-| **Status** | `phase-1-complete` |
+| **Status** | `draft` |
 | **Supersedes** | N/A |
 | **Superseded by** | N/A |
 | **Author** | Oz (Part A) / Distillation Agent V4 (Part B) |

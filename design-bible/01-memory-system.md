@@ -6,7 +6,7 @@
 | **Name** | Volume 1: Memory System |
 | **Purpose** | Design specification for the L1-L10 cognitive memory architecture — Atlas's primary competitive moat |
 | **Owner** | Design Bible / Volume 1 |
-| **Status** | `phase-1-complete` (B.1-B.4 filled by distillation agent) |
+| **Status** | `draft` (B.1-B.4 filled by distillation agent) |
 | **Supersedes** | N/A |
 | **Superseded by** | N/A |
 | **Author** | Oz (Part A) / Distillation Agent V1 (Part B) |

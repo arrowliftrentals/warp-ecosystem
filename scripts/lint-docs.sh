@@ -53,6 +53,15 @@ if [[ ${#FILES[@]} -eq 0 ]]; then
     exit 0
 fi
 
+# Exclude agent-comm/ — coordination data files, not design documents (see §10.1)
+FILTERED=()
+for f in "${FILES[@]}"; do
+    if [[ "$f" != *"/agent-comm/"* ]]; then
+        FILTERED+=("$f")
+    fi
+done
+FILES=("${FILTERED[@]}")
+
 # ---------------------------------------------------------------------------
 # Validation functions
 # ---------------------------------------------------------------------------

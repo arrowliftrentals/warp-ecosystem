@@ -6,7 +6,7 @@
 | **Name** | Volume 9: Governance & Validation |
 | **Purpose** | Design specification for the constitutional enforcement layer — intent validation, output governance, and boundary compliance |
 | **Owner** | Design Bible / Volume 9 |
-| **Status** | `phase-1-complete` |
+| **Status** | `draft` |
 | **Supersedes** | N/A |
 | **Superseded by** | N/A |
 | **Author** | Oz (Part A) / Distillation Agent V9 (Part B) |

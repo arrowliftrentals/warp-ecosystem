@@ -6,7 +6,7 @@
 | **Name** | Volume 7: Console (Frontend) |
 | **Purpose** | Design specification for the visual interface — chat, telemetry, 3D visualization, file exploration, and system monitoring |
 | **Owner** | Design Bible / Volume 7 |
-| **Status** | `phase-1-complete` |
+| **Status** | `draft` |
 | **Supersedes** | N/A |
 | **Superseded by** | N/A |
 | **Author** | Oz (Part A) / Vol-07 Distillation Agent (Part B) |

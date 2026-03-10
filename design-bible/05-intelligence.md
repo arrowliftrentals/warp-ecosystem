@@ -6,7 +6,7 @@
 | **Name** | Volume 5: Intelligence Pipeline |
 | **Purpose** | Design specification for intellectual amplification — analogical reasoning, hypothesis generation, Socratic challenge, and growth tracking |
 | **Owner** | Design Bible / Volume 5 |
-| **Status** | `phase-1-complete` |
+| **Status** | `draft` |
 | **Supersedes** | N/A |
 | **Superseded by** | N/A |
 | **Author** | Oz (Part A) / Oz Phase 1 Distillation Agent (Part B) |
