@@ -53,12 +53,15 @@ if [[ ${#FILES[@]} -eq 0 ]]; then
     exit 0
 fi
 
-# Exclude agent-comm/ — coordination data files, not design documents (see §10.1)
+# Exclude files not subject to §9 doc standard
 FILTERED=()
 for f in "${FILES[@]}"; do
-    if [[ "$f" != *"/agent-comm/"* ]]; then
-        FILTERED+=("$f")
-    fi
+    base=$(basename "$f")
+    # agent-comm/ — coordination data files, not design documents (see §10.1)
+    [[ "$f" == *"/agent-comm/"* ]] && continue
+    # Standard repo files have their own conventions
+    [[ "$base" == "README.md" || "$base" == "CHANGELOG.md" || "$base" == "CONTRIBUTING.md" ]] && continue
+    FILTERED+=("$f")
 done
 FILES=("${FILTERED[@]}")
 
@@ -173,6 +176,18 @@ lint_file() {
             echo -e "  ${RED}INVALID${NC}: Status is 'superseded' but 'Superseded by' is N/A"
             file_errors=$((file_errors + 1))
         fi
+    fi
+
+    # --- Table formatting artifact check (|| double-pipe rows) ---
+    local artifact_lines
+    artifact_lines=$(grep -n '^||' "$file" 2>/dev/null || true)
+    if [[ -n "$artifact_lines" ]]; then
+        local artifact_count
+        artifact_count=$(echo "$artifact_lines" | wc -l | tr -d ' ')
+        echo -e "  ${RED}ARTIFACT${NC}: $artifact_count line(s) with || double-pipe prefix (malformed table rows):"
+        echo "$artifact_lines" | head -3
+        [[ $artifact_count -gt 3 ]] && echo "    ... and $((artifact_count - 3)) more"
+        file_errors=$((file_errors + 1))
     fi
 
     # --- Result ---

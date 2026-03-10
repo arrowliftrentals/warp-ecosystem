@@ -40,10 +40,10 @@ if [[ $FAILED -ne 0 ]]; then
 fi
 
 # =============================================================================
-# 2. Doc standard linter — all .md files in design-bible/ must comply.
+# 2. Doc standard linter — all .md files in design-bible/ and atlas-v4/ must comply.
 # =============================================================================
 
-STAGED_DOCS=$(echo "$STAGED_ALL" | grep '^design-bible/.*\.md$' || true)
+STAGED_DOCS=$(echo "$STAGED_ALL" | grep -E '^(design-bible|atlas-v4)/.*\.md$' || true)
 
 if [[ -n "$STAGED_DOCS" ]]; then
     for f in $STAGED_DOCS; do
