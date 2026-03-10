@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+# Pre-commit hook: enforce doc standard on ALL staged .md files in design-bible/.
+# No bypass. Fix the violations.
+
+STAGED_DOCS=$(git diff --cached --name-only --diff-filter=ACM | grep '^design-bible/.*\.md$' || true)
+
+if [[ -z "$STAGED_DOCS" ]]; then
+    exit 0
+fi
+
+FAILED=0
+for f in $STAGED_DOCS; do
+    if ! bash scripts/lint-docs.sh "$f" > /dev/null 2>&1; then
+        FAILED=1
+        bash scripts/lint-docs.sh "$f"
+    fi
+done
+
+if [[ $FAILED -ne 0 ]]; then
+    echo ""
+    echo "Commit blocked — fix doc standard violations above."
+    exit 1
+fi
