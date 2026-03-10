@@ -68,10 +68,11 @@ All code must satisfy:
 All code must pass:
 1. `ruff check src/ tests/` — 0 errors
 2. `mypy src/ --strict` — 0 errors
-3. `pytest tests/smoke/ -m smoke` — all pass
-4. `pytest tests/ -k <subsystem>` — all pass
+3. `python -m atlas.tools.design_lint check src/ --severity block` — 0 BLOCK violations
+4. `pytest tests/smoke/ -m smoke` — all pass
+5. `pytest tests/ -k <subsystem>` — all pass
 
-Do not commit if any check fails.
+Do not commit if any check fails. See `DESIGN_LINT.md` for the full rule set.
 
 ---
 

@@ -562,6 +562,7 @@ Every document receives a unique alphanumeric identifier for machine-sortable se
 | `DB-TPL-002` | `prompts/distill-phase2.md` | Phase 2 Distillation Prompt Template |
 | `DB-TPL-003` | `prompts/integration-gate.md` | Integration Gate Prompt Template |
 | `DB-TPL-004` | `prompts/coding-agent.md` | Coding Agent Prompt Template |
+| `DB-X00-006` | `DESIGN_LINT.md` | Design Lint Specification |
 
 **Future doc type prefixes** (reserved, not yet in use):
 - `ADR-NNN` — Architecture Decision Records
