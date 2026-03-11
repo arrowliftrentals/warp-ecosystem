@@ -70,7 +70,9 @@ Fill out B.5 through B.13:
 ## Git Workflow
 1. Create branch: `git checkout -b distill/vol-{{PAD}}`
 3. Make your changes to `{{MANIFEST}}` and `design-bible/agent-comm/vol-{{PAD}}.md`
-4. Commit with: `git add -A && git commit -m "docs(vol-{{NUM}}): Phase 2 distillation — B.5-B.13"`
+4. Commit with: `git add {{MANIFEST}} design-bible/agent-comm/vol-{{PAD}}.md && git commit -m "docs(vol-{{NUM}}): Phase 2 distillation — B.5-B.13
+
+Co-Authored-By: Oz <oz-agent@warp.dev>"`
 5. Push: `git push origin distill/vol-{{PAD}}`'
 
 echo "=== Launching Phase 2 Distillation (10 agents) ==="
