@@ -720,6 +720,18 @@ STATUS: pending
 INTERFACE: TBD — failure pattern extraction from L3 episodic memory. Not needed until FailurePreventionValidator is built.
 ```
 
+```
+DEPENDENCY: Volume 7 needs engagement_step and implementation_event SSE event type specifications from Volume 2/8 (Phase 2 discovery D7)
+STATUS: pending
+INTERFACE: SSE event types: engagement_step { step: number, action: string, detail: string, status: string, timestamp: string } and implementation_event { event_type: string, data: Record<string, unknown> }. Currently undocumented — found in ChatPanel.tsx SSE parser. Must be documented in Volume 2 shared contracts.
+```
+
+```
+DEPENDENCY: Volume 7 needs Zod schema validation patterns aligned with backend Pydantic models from Volume 1/8 (Phase 2 discovery D1)
+STATUS: pending
+INTERFACE: Zod schemas mirroring Pydantic response types (ChatMessage, HealthState, MemoryLayer, GoalInfo, TaskInfo). Generated or manually maintained at console API client boundary.
+```
+
 ---
 
 ## Conflict Flags (Agent-Registered)
