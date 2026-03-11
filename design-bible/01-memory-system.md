@@ -494,6 +494,7 @@ Volume 1 owns all Pydantic schemas for data entering/leaving memory layers. Non-
 - `communication_style: Optional[str] = None`
 - `expertise_areas: List[str]` — `Field(default_factory=list)`
 - `interaction_patterns: List[Dict[str, Any]]` — `Field(default_factory=list)`
+- `intellectual_profile: Optional[IntellectualProfile] = None` — First-class field for Vol 5 intelligence growth tracking. Schema defined by Vol 5 (`atlas/intelligence/schemas.py`), stored as JSON in L9. Added per GAP-01/C-19 resolution.
 - `last_updated: datetime` — `Field(default_factory=datetime.now)`
 - Persists to: L9 (SQLite `profiles` table)
 

@@ -133,7 +133,7 @@ The Voice subsystem provides natural audio I/O for Jarvis-style interaction with
 Audio In ──▶ Speaker Verifier (optional) ──▶ STT Engine ──▶ Transcript
                                                               │
                       VoiceController Pipeline                ▼
-  Transcript ─▶ DecisionValidator ─▶ Orchestrator.process_query() (Vol 2)
+  Transcript ─▶ DecisionValidator ─▶ ConversationEngine.process_message() (Vol 2)
                                            │
                                     Response Text
                                            │
@@ -160,7 +160,7 @@ Audio In ──▶ Speaker Verifier (optional) ──▶ STT Engine ──▶ Tr
 **Constructor:**
 ```
 VoiceController(
-    orchestrator: OrchestratorEngine,     # Vol 2
+    orchestrator: ConversationEngine,      # Vol 2 (canonical name per C-18)
     memory_manager: MemoryManager,        # Vol 1
     governance: OutputGovernor,           # Vol 9
     decision_validator: DecisionValidator, # Vol 9
@@ -177,7 +177,7 @@ VoiceController(
 - `async shutdown() -> None` — Graceful teardown
 
 **Dependencies consumed:**
-- `OrchestratorEngine.process_query(query: str, session_id: str) -> str` (Vol 2)
+- `ConversationEngine.process_message(message: str, session_id: str, device_id: str) -> ConversationResponse` (Vol 2, canonical name per C-18)
 - `OutputGovernor.govern(text: str, evidence: list[str]) -> GovernedOutput` (Vol 9)
 - `DecisionValidator.validate(command: str) -> ValidationDecision` (Vol 9)
 - `MemoryManager.l3.record_episode(...)` (Vol 1)
@@ -294,7 +294,7 @@ Cloud proxy endpoints (DEFER): `/v1/voice/realtime/session`, `/api/stt/elevenlab
 Justification: Module entry point with lazy imports. Design pattern is sound (lazy-load heavy dependencies). Rebuild with updated import paths under `src/atlas/voice/`.
 
 **`src/voice/voice_controller.py`** — **REBUILD**
-Justification: Core orchestrator for the voice pipeline. Architecture (STT→safety→query→govern→TTS→log) is correct. Two critical gaps: (1) `_process_query()` returns placeholder `"Acknowledged: {transcript}"` instead of routing through real orchestrator — must wire to Vol 2's `OrchestratorEngine.process_query()`; (2) voice governance must use Vol 9's `GovernedOutput` instead of voice-specific `ApprovedUtterance`. Session management, warmup lifecycle, and TTS engine delegation carry forward.
+Justification: Core orchestrator for the voice pipeline. Architecture (STT→safety→query→govern→TTS→log) is correct. Two critical gaps: (1) `_process_query()` returns placeholder `"Acknowledged: {transcript}"` instead of routing through real orchestrator — must wire to Vol 2's `ConversationEngine.process_message()` (canonical name per C-18); (2) voice governance must use Vol 9's `GovernedOutput` instead of voice-specific `ApprovedUtterance`. Session management, warmup lifecycle, and TTS engine delegation carry forward.
 
 **`src/voice/governance.py`** — **KILL**
 Justification: `ApprovedUtterance` superseded by Vol 9's unified `GovernedOutput` per AGENT_COMM.md pre-registered ownership. The governance *pattern* (create → hash → stamp → validate before speech) is preserved in Vol 9's `OutputGovernor`. `log_voice_event()` moves into VoiceController's L3 logging.

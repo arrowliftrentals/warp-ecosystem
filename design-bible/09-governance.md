@@ -576,6 +576,57 @@ Governance configuration is loaded via `AtlasConfig(BaseSettings)` from `atlas/s
 
 **11.4: memory_guard.py is assigned to Volume 9 per C-06.** The conflict report assigns memory write validation to Volume 9. This means DecisionValidator (or a sibling `MemoryWriteValidator`) should validate data before it enters memory layers. This is a new responsibility not present in Attempt 3's governance subsystem and must be designed in the rebuild. The interface: `validate_memory_write(layer_id: str, data: BaseModel) -> ValidationDecision`.
 
+**Tier 2+ Stub Design — MemoryWriteValidator:**
+
+```python
+# Location: src/atlas/governance/memory_guard.py
+# Owner: Vol 9 (Governance) per C-06
+# Tier: 2+ (after core governance proven at Tier 0-1)
+
+from pydantic import BaseModel
+from atlas.governance.schemas import ValidationDecision
+from atlas.shared.types import LayerId
+
+class MemoryWritePolicy(BaseModel):
+    """Per-layer write policy. Loaded from config."""
+    layer_id: LayerId
+    max_item_bytes: int = 262144  # 256KB
+    require_schema_validation: bool = True
+    allowed_writers: list[str] = ["orchestrator", "learning", "self_modification"]
+
+class MemoryWriteValidator:
+    """Validates data before it enters memory layers.
+
+    Responsibilities:
+    - Schema conformance (data matches layer's Pydantic model)
+    - Size bounds (reject oversized writes)
+    - Writer authorization (only allowed subsystems write to each layer)
+    - Content safety (no raw LLM output to persistent layers without governance)
+    """
+
+    def __init__(self, policies: list[MemoryWritePolicy]) -> None: ...
+
+    def validate_memory_write(
+        self,
+        layer_id: LayerId,
+        data: BaseModel,
+        writer: str,
+    ) -> ValidationDecision:
+        """Validate a proposed memory write.
+
+        Args:
+            layer_id: Target memory layer (e.g. 'l3', 'l9').
+            data: The Pydantic model being written.
+            writer: Subsystem identifier requesting the write.
+
+        Returns:
+            ValidationDecision with SAFE/NEEDS_REVIEW/UNSAFE.
+        """
+        ...
+```
+
+**Integration point:** Vol 1 MemoryManager calls `validate_memory_write()` before persisting to any layer. Wired at Tier 2 when `enable_memory_guard` config flag is True.
+
 ### B.12 Oversight Self-Review
 
 **Q1: Does the design address every item in A.4 (Known Failures & Warnings)?**

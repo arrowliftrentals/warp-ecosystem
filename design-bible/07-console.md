@@ -248,7 +248,7 @@ The Console is Atlas's **single observability and interaction surface** — a br
 
 1. User types in `PromptInput` → calls `sendMessage()` on `ConsoleProvider` context
 2. `ConsoleProvider` dispatches to `ChatPanel` stream handler → `POST /v1/atlas/chat` with `Accept: text/event-stream`
-3. Backend streams SSE events: `text` (token chunks), `thinking` (reasoning steps), `tool_call` (tool invocations), `tool_result` (tool outputs), `error`, `done`
+3. Backend streams SSE events: `THINKING` (reasoning steps), `TOOL_CALL` (tool invocations), `TOOL_RESULT` (tool outputs), `CHUNK` (text tokens), `DONE` (stream complete), `ERROR` (stream error) — per shared-contracts.md §6.2. Note: Attempt 3 `engagement_step` and `implementation_event` types are deprecated and NOT supported in the rebuild (per C-22).
 4. `ConsoleProvider` receives events, buffers via 150ms throttle-flush, batch-updates context state
 5. React re-renders `AgentResponsePanel` (markdown content), `ThinkingProcess` (step list) from context state
 6. On `done` event: streaming flag cleared, final message committed to message array

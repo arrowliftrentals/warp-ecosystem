@@ -14,11 +14,12 @@ conflict-report.md C-01, C-20.
 from __future__ import annotations
 
 import enum
-from datetime import datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, Field
 
+if TYPE_CHECKING:
+    from datetime import datetime
 
 # ---------- Enums ----------
 

@@ -36,10 +36,10 @@ Each volume self-scored on 9 criteria (1-5 each, max 45). The Integration Gate i
 ### Per-Volume Gate Notes
 
 **Vol 1 (Memory) — Gate 41/45**
-Cross-volume consistency deducted 1pt: IntellectualProfile first-class L9 field requested by Vol 5 not yet formalized as a schema change in Vol 1. Otherwise excellent — 10-layer architecture well-specified, all 43 files triaged.
+Cross-volume consistency deducted 1pt: IntellectualProfile first-class L9 field requested by Vol 5 not yet formalized as a schema change in Vol 1. Otherwise excellent — 10-layer architecture well-specified, all 43 files triaged. **Update:** GAP-01 resolved — `intellectual_profile` field added to Vol 1 B.6 L9 UserProfile.
 
 **Vol 2 (Orchestrator) — Gate 41/45**
-Interface completeness deducted 1pt: `ConversationEngine.process_message()` vs `process_query()` naming appears in Vol 6 and Vol 8 with inconsistent references. The field rename `response` → `answer` in ChatResponse (Vol 8) is documented locally but not in shared contracts as a binding transform.
+Interface completeness deducted 1pt: `ConversationEngine.process_message()` vs `process_query()` naming appears in Vol 6 and Vol 8 with inconsistent references. The field rename `response` → `answer` in ChatResponse (Vol 8) is documented locally but not in shared contracts as a binding transform. **Update:** GAP-03 resolved — Vol 6 standardized to `ConversationEngine.process_message()`. GAP-08 resolved — shared-contracts.md §6 documents field mapping.
 
 **Vol 3 (Learning) — Gate 39/45**
 Scope triage deducted 1pt: 70 files is the second-largest manifest. The boundary between Learning (Vol 3) and Intelligence (Vol 5) knowledge pipeline components is addressed by C-02/C-03 but remains the trickiest cross-volume seam.
@@ -51,16 +51,16 @@ Testing coverage deducted 1pt: Sandbox-first approach is correct but integration
 Cross-volume consistency deducted 1pt: IntellectualProfile as first-class L9 field requires Vol 1 schema change. OperationalDiagnostician ownership transferred to Vol 9 per C-08 but Vol 9 plans to absorb it into DecisionValidator rather than maintain it as a separate component — approaches differ.
 
 **Vol 6 (Voice & Multimodal) — Gate 42/45**
-Interface completeness deducted 1pt: References `OrchestratorEngine.process_query()` while shared contracts specify `ConversationEngine.process_message()` — class name and method name both differ. STT is entirely deferred (acknowledged gap for "Jarvis" vision).
+Interface completeness deducted 1pt: References `OrchestratorEngine.process_query()` while shared contracts specify `ConversationEngine.process_message()` — class name and method name both differ. STT is entirely deferred (acknowledged gap for "Jarvis" vision). **Update:** GAP-03 resolved — all 4 references in Vol 6 (B.3, B.4) updated to `ConversationEngine.process_message()`.
 
 **Vol 7 (Console) — Gate 38/45**
-Cross-volume integration score of 3/5 is honest and confirmed. Undocumented SSE event types (`engagement_step`, `implementation_event`) are consumed but not specified in Vol 2 or Vol 8 contracts. API contract drift prevention relies on future Pydantic→TypeScript codegen that is not yet operational.
+Cross-volume integration score of 3/5 is honest and confirmed. Undocumented SSE event types (`engagement_step`, `implementation_event`) are consumed but not specified in Vol 2 or Vol 8 contracts. API contract drift prevention relies on future Pydantic→TypeScript codegen that is not yet operational. **Update:** GAP-04 resolved — Vol 7 B.3 updated with canonical SSE event types from shared-contracts.md §6.2; deprecated types explicitly marked.
 
 **Vol 8 (API Infrastructure) — Gate 41/45**
 Documentation quality deducted 1pt: Verbose due to schema count. WebSocket telemetry protocol deferred. `ChatResponse.answer` field rename from `ConversationResponse.response` is documented in B.6 but not in shared-contracts.md.
 
 **Vol 9 (Governance) — Gate 40/45**
-Interface completeness deducted 1pt: `memory_guard.py` assigned by C-06 is acknowledged as a gap but has no design — deferred to Tier 2+. OperationalDiagnostician assigned by C-08 is planned as DecisionValidator absorption rather than a standalone component. Confidence model weights (0.4/0.4/0.2) are arbitrary defaults with no calibration plan.
+Interface completeness deducted 1pt: `memory_guard.py` assigned by C-06 is acknowledged as a gap but has no design — deferred to Tier 2+. OperationalDiagnostician assigned by C-08 is planned as DecisionValidator absorption rather than a standalone component. Confidence model weights (0.4/0.4/0.2) are arbitrary defaults with no calibration plan. **Update:** GAP-05 resolved — MemoryWriteValidator Tier 2+ stub design added to Vol 9 B.11.4. GAP-06 resolved — Vol 5 D-INT-04 updated with absorption note per C-21.
 
 **Vol 10 (External Tools) — Gate 40/45**
 Testing coverage deducted 1pt: Git tools lack a dedicated acceptance test (identified by volume's own B.12). Domain tool simplification leaves residual ambiguity for the programming agent regarding category-based filtering threshold.
@@ -115,16 +115,16 @@ Interface contracts were checked for consistency across consumer/provider volume
 | Contract | Provider | Consumer(s) | Consistent? | Note |
 |----------|----------|-------------|-------------|------|
 | `MemoryManager` layer accessors | Vol 1 | Vol 2,3,4,5,6,9,10 | ✓ | All use `.l3`, `.l4`, `.l9`, `.l10` pattern |
-| `ConversationEngine.process_message()` | Vol 2 | Vol 6, Vol 8 | ⚠ | Vol 6 uses `process_query()`, Vol 8 maps `query→message` — see C-18 |
+| `ConversationEngine.process_message()` | Vol 2 | Vol 6, Vol 8 | ✓ | **Resolved:** Vol 6 updated to `ConversationEngine.process_message()` per C-18 |
 | `DecisionValidator.validate()` | Vol 9 | Vol 2, Vol 4, Vol 10 | ✓ | Consistent signatures |
 | `AnswerGovernor.govern()` | Vol 9 | Vol 2, Vol 6 | ✓ | Consistent signatures |
 | `ToolRegistry.execute()` | Vol 10 | Vol 2 | ✓ | Matches shared-contracts.md 2.4 |
 | `GovernedOutput` schema | Vol 9 | Vol 2, Vol 6, Vol 7, Vol 8 | ✓ | Single egress schema respected |
 | `EvidenceStore.store()` | Vol 9 | Vol 2 | ✓ | Matches shared-contracts.md 2.7 |
-| SSE event types | Vol 2/Vol 8 | Vol 7 | ⚠ | `engagement_step`, `implementation_event` undocumented — see C-22 |
-| `ChatResponse` field names | Vol 8 | Vol 7 | ⚠ | `answer` maps from `response` — transform documented in Vol 8 but not in shared-contracts — see C-23 |
+| SSE event types | Vol 2/Vol 8 | Vol 7 | ✓ | **Resolved:** Vol 7 updated with canonical event types; deprecated types explicitly marked per C-22 |
+|| `ChatResponse` field names | Vol 8 | Vol 7 | ✓ | **Resolved:** shared-contracts.md §6 documents field mapping per C-23 |
 
-**Result: 6/9 contracts fully consistent, 3 with documented discrepancies (new conflicts C-18, C-22, C-23). PASS with caveats.**
+**Result: 9/9 contracts fully consistent. All 3 prior discrepancies (C-18, C-22, C-23) resolved. PASS.**
 
 ### 2.4 B.6 Data Model Consistency
 
@@ -133,15 +133,15 @@ Schema ownership was verified against C-01 (single ownership rule) and C-03 (mem
 | Schema Domain | Owner | Consumers | Conflict? |
 |--------------|-------|-----------|-----------|
 | Memory layer schemas (L1-L10) | Vol 1 | Vol 2,3,4,5,6,9,10 | No |
-| Governance schemas (GovernedOutput, etc.) | Vol 9 | Vol 2,6,7,8 | ⚠ Currently in `memory/schemas.py` (Vol 1); migration to `governance/schemas.py` needed — see C-20 |
+| Governance schemas (GovernedOutput, etc.) | Vol 9 | Vol 2,6,7,8 | ✓ **Resolved:** created in `atlas-v4/src/atlas/governance/schemas.py` per C-20 |
 | Intelligence amplification result schemas | Vol 5 | Vol 2 | No |
 | Voice schemas | Vol 6 | Vol 7,8 | No |
 | Tool schemas (ToolDefinition, ToolResult) | Vol 10 | Vol 2,8 | No |
 | API boundary schemas (ChatRequest, etc.) | Vol 8 | Vol 7 | No |
 | Error hierarchy (AtlasError) | Vol 8 | All | No |
-| IntellectualProfile on UserProfile | Vol 1 (requested by Vol 5) | Vol 5 | ⚠ New field requested, not yet formalized — see C-19 |
+| IntellectualProfile on UserProfile | Vol 1 (requested by Vol 5) | Vol 5 | ✓ **Resolved:** `intellectual_profile` field added to Vol 1 B.6 L9 UserProfile per C-19 |
 
-**Result: 6/8 schema domains clean, 2 with migration/extension coordination needed. PASS with caveats.**
+**Result: 8/8 schema domains clean. All 2 prior migration items (C-19, C-20) resolved. PASS.**
 
 ### 2.5 B.13 Independent Re-Scoring
 
@@ -151,41 +151,41 @@ All 10 volumes' self-scores were independently verified. Maximum delta was 1 poi
 
 ---
 
-## 3. Unresolved Gaps
+## 3. ~~Unresolved~~ Resolved Gaps
 
-### 3.1 Cross-Volume Gaps (require coordination)
+### 3.1 Cross-Volume Gaps — ALL RESOLVED
 
-**GAP-01: IntellectualProfile L9 field (Vol 1 ↔ Vol 5)**
-Vol 5 B.10 L-INT-05 requires IntellectualProfile as a first-class field on Vol 1's L9 UserProfile schema. This is acknowledged in Vol 5 B.13 criterion 9 but not formalized as a shared-contracts change. Vol 1 must accept this schema extension.
-**Severity: LOW** — Vol 5 is Phase 4; Vol 1 can add the field when Vol 5 is built.
+**GAP-01: IntellectualProfile L9 field (Vol 1 ↔ Vol 5)** — **RESOLVED**
+`intellectual_profile: Optional[IntellectualProfile] = None` added to Vol 1 B.6 L9 UserProfile with cross-reference to Vol 5 schema.
+**Severity: ~~LOW~~ CLOSED** — field added to design doc.
 
 **GAP-02: Governance schema migration (Vol 1 → Vol 9)** — **RESOLVED**
 GovernedOutput, ExtractedClaim, EvidenceItem, and related schemas have been created in `atlas-v4/src/atlas/governance/schemas.py` with full Pydantic definitions. Vol 1 memory schemas no longer include governance types. All consumers import from `atlas.governance.schemas`.
 **Severity: ~~MEDIUM~~ CLOSED** — implemented in atlas-v4 skeleton.
 
-**GAP-03: process_query vs process_message naming (Vol 2 ↔ Vol 6 ↔ Vol 8)**
-Vol 6 B.3 references `OrchestratorEngine.process_query()`. Vol 8 B.6 maps `ChatRequest.query → ConversationEngine.process_message(message=...)`. The class name (OrchestratorEngine vs ConversationEngine) and method name (process_query vs process_message) both vary.
-**Severity: LOW** — Vol 8 B.6 documents the mapping; just needs standardization in shared-contracts.
+**GAP-03: process_query vs process_message naming (Vol 2 ↔ Vol 6 ↔ Vol 8)** — **RESOLVED**
+All 4 references in Vol 6 (B.3 pipeline diagram, B.3 constructor, B.3 dependencies, B.4 voice_controller triage) updated from `OrchestratorEngine.process_query()` to `ConversationEngine.process_message()` per C-18.
+**Severity: ~~LOW~~ CLOSED** — naming standardized.
 
-**GAP-04: Undocumented SSE event types (Vol 2 ↔ Vol 7 ↔ Vol 8)**
-Vol 7 B.11 D7 identifies `engagement_step` and `implementation_event` SSE event types consumed by the console but not documented in Vol 2 or Vol 8 shared contracts.
-**Severity: LOW** — these may be deprecated in the rebuild, but if kept, must be documented.
+**GAP-04: Undocumented SSE event types (Vol 2 ↔ Vol 7 ↔ Vol 8)** — **RESOLVED**
+Vol 7 B.3 updated with canonical SSE event types (`THINKING`, `TOOL_CALL`, `TOOL_RESULT`, `CHUNK`, `DONE`, `ERROR`) from shared-contracts.md §6.2. Attempt 3 `engagement_step` and `implementation_event` explicitly marked as deprecated per C-22.
+**Severity: ~~LOW~~ CLOSED** — event types documented.
 
-**GAP-05: memory_guard.py design (Vol 9)**
-C-06 assigns memory write validation to Vol 9. Vol 9 B.12 acknowledges the gap but has no design — deferred to Tier 2+. No Attempt 3 implementation to distill from within Vol 9.
-**Severity: LOW** — Tier 2+ feature; core governance works without it.
+**GAP-05: memory_guard.py design (Vol 9)** — **RESOLVED**
+Tier 2+ stub design added to Vol 9 B.11.4: `MemoryWriteValidator` class with `validate_memory_write(layer_id, data, writer) -> ValidationDecision`, `MemoryWritePolicy` schema, integration point with Vol 1 MemoryManager. Gated by `enable_memory_guard` config flag.
+**Severity: ~~LOW~~ CLOSED** — stub design documented.
 
-**GAP-06: OperationalDiagnostician approach mismatch (Vol 5 ↔ Vol 9)**
-Vol 5 B.11 D-INT-04 transfers OperationalDiagnostician to Vol 9 as a standalone component (per C-08). Vol 9 B.12 plans to absorb it into DecisionValidator at Tier 4+. These are different implementation approaches.
-**Severity: LOW** — Tier 4+ concern; both approaches are valid, just needs agreement before implementation.
+**GAP-06: OperationalDiagnostician approach mismatch (Vol 5 ↔ Vol 9)** — **RESOLVED**
+Vol 5 D-INT-04 updated with explicit note: Vol 9 will absorb diagnostics into DecisionValidator at Tier 4+ per C-21. Vol 5 does not specify implementation form — Vol 9 owns the capability.
+**Severity: ~~LOW~~ CLOSED** — approaches aligned.
 
-**GAP-07: Speculation scrubbing ownership (Vol 0 ↔ Vol 5 ↔ Vol 9)**
-Vol 9 B.11.1 recommends promoting speculation scrubbing to `shared/text.py` as a system-wide utility. No volume currently claims ownership of this shared module.
-**Severity: LOW** — can be resolved during Tier 0-1 when governance is built.
+**GAP-07: Speculation scrubbing ownership (Vol 0 ↔ Vol 5 ↔ Vol 9)** — **RESOLVED**
+`atlas-v4/src/atlas/shared/text.py` created with `scrub_speculation()` (full implementation with ordered regex patterns per Vol 9 B.10 Lesson 10.2) and `detect_contradiction()` (Tier 1+ stub). Owned by Vol 8 per C-24.
+**Severity: ~~LOW~~ CLOSED** — shared utility created.
 
-**GAP-08: ChatResponse field rename contract (Vol 2 ↔ Vol 8)**
-Vol 8 B.6 documents `ConversationResponse.response → ChatResponse.answer` rename. This transform is not in shared-contracts.md as a binding agreement.
-**Severity: LOW** — documented locally, needs promotion to shared contracts.
+**GAP-08: ChatResponse field rename contract (Vol 2 ↔ Vol 8)** — **RESOLVED**
+Integration Gate added shared-contracts.md Section 6 with explicit field mapping (`ConversationResponse.response → ChatResponse.answer`). Binding agreement documented.
+**Severity: ~~LOW~~ CLOSED** — shared contract created.
 
 ### 3.2 Volume-Internal Gaps
 
@@ -208,13 +208,13 @@ Vol 8 B.6 documents `ConversationResponse.response → ChatResponse.answer` rena
 3. **All A.2 files triaged in B.4** — ✓ PASS (469/469)
 4. **All B.13 scores above 30/45 threshold** — ✓ PASS (min 39, max 43)
 5. **No B.13 score discrepancy >5 points** — ✓ PASS (max delta 1)
-6. **Cross-volume interface contracts consistent** — ✓ PASS with 3 documented caveats (C-18, C-22, C-23)
-7. **Schema ownership clear** — ✓ PASS with 2 migration items (C-19, C-20)
-8. **No blocking unresolved gaps** — ✓ PASS (all gaps are LOW or MEDIUM severity)
+6. **Cross-volume interface contracts consistent** — ✓ PASS (all 3 prior caveats resolved: C-18, C-22, C-23)
+7. **Schema ownership clear** — ✓ PASS (all 2 migration items resolved: C-19, C-20)
+8. **No blocking unresolved gaps** — ✓ PASS (all 8 cross-volume gaps CLOSED)
 
 ### Blockers
 
-None. All identified gaps are LOW or MEDIUM severity and are either (a) deferred to later tiers, or (b) resolvable during Tier 0-1 implementation.
+None. All 8 cross-volume gaps have been resolved. Volume-internal gaps remain LOW severity and are addressable during implementation.
 
 ### Recommendation
 
@@ -225,9 +225,9 @@ The 10 volumes collectively provide:
 - 147 DEFER components with clear phase assignments
 - 196 KILL components with documented rationale
 - Full interface contracts, schema definitions, error hierarchies, testing strategies, and configuration for all REBUILD scope
-- 8 cross-volume gaps identified, all addressable during implementation without design rework
+- All 8 cross-volume gaps identified and resolved
 
-The one MEDIUM-severity item (GAP-02: governance schema migration) should be resolved as the first coordination step before Phase 2 coding begins.
+All gaps have been closed. The Design Bible is ready for Tier 0 implementation.
 
 ---
 
@@ -236,3 +236,4 @@ The one MEDIUM-severity item (GAP-02: governance schema migration) should be res
 | Version | Date | Modified By | Summary |
 |---------|------|-------------|---------|
 | v1 | 2026-03-11 | Integration Gate Agent (Oz) | Initial final review — 10 volumes assessed, all quality checks passed, GO recommendation issued |
+|| v2 | 2026-03-11 | Oz | All 8 cross-volume gaps resolved: GAP-01 (IntellectualProfile field added to Vol 1), GAP-02 (governance schemas created), GAP-03 (Vol 6 naming fixed), GAP-04 (SSE events documented in Vol 7), GAP-05 (memory_guard stub in Vol 9), GAP-06 (Vol 5/9 diagnostician aligned), GAP-07 (shared/text.py created), GAP-08 (field mapping in shared-contracts). Updated consistency tables to reflect all-clear status. |
