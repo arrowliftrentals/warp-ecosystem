@@ -3,16 +3,16 @@
 | Field | Value |
 |---|---|
 | **Doc ID** | `DB-G01-002` |
-| **Name** | Phase 1 Shared Contracts |
-| **Purpose** | Binding interface contracts that span volume boundaries — the cross-subsystem API surface for Phase 2 |
+| **Name** | Phase 1 + Phase 2 Shared Contracts |
+| **Purpose** | Binding interface contracts that span volume boundaries — the cross-subsystem API surface for implementation |
 | **Owner** | Design Bible / Integration Gate |
 | **Status** | `active` |
 | **Supersedes** | N/A |
 | **Superseded by** | N/A |
 | **Author** | Integration Gate Agent |
-| **Version** | v1 |
+| **Version** | v2 |
 | **Created** | 2026-03-10 |
-| **Last Modified** | 2026-03-10 |
+| **Last Modified** | 2026-03-11 |
 
 ---
 
@@ -146,9 +146,9 @@ Vol 2 calls this after each tool execution in the ReAct loop, before calling Ans
 
 ### 2.8 Vol 6 → Vol 2 (Voice calls orchestrator)
 ```
-OrchestratorEngine.process_message(message: str, session_id: str, device_id: str) -> ConversationResponse
+ConversationEngine.process_message(message: str, session_id: str, device_id: str) -> ConversationResponse
 ```
-Via VoiceController; same interface as Vol 8.
+Via VoiceController; same interface as Vol 8. Per C-18 resolution: canonical name is `ConversationEngine.process_message()` (not `OrchestratorEngine.process_query()`).
 
 ### 2.9 Vol 4 → Vol 1 (Self-modification stores claims)
 ```
@@ -231,8 +231,73 @@ Location: `atlas/shared/llm.py`
 
 ---
 
+## 6. Response Field Mapping Contracts (Phase 2 addition per C-23)
+
+### 6.1 ConversationResponse → ChatResponse (Vol 2 → Vol 8)
+Vol 8 route handler maps internal engine output to HTTP response:
+- `ConversationResponse.response` → `ChatResponse.answer`
+- `ConversationResponse.evidence_refs` → `ChatResponse.evidence`
+- `ConversationResponse.session_id` → `ChatResponse.session_id` (unchanged)
+- `ConversationResponse.metadata` → `ChatResponse.metadata` (unchanged)
+- `ConversationResponse.actions_taken` → `ChatResponse.tool_calls` (reconstructed as `ToolCallSummary[]`)
+- `GovernedOutput.approval == "approved"` → `ChatResponse.governed = True`
+
+Vol 8 owns this mapping. Vol 2 returns `ConversationResponse`. Vol 7 consumes `ChatResponse`.
+
+### 6.2 SSE StreamEvent Types (Vol 8, consumed by Vol 7)
+Canonical SSE event types for `POST /v1/atlas/chat` with `stream: true`:
+- `THINKING` — reasoning step update
+- `TOOL_CALL` — tool invocation
+- `TOOL_RESULT` — tool output
+- `CHUNK` — text token
+- `DONE` — stream complete
+- `ERROR` — stream error
+
+Per C-22: `engagement_step` and `implementation_event` are Attempt 3 artifacts. The programming agent should verify whether the rebuild orchestrator produces these; if not, Vol 7 removes support.
+
+---
+
+## 7. Phase 2 Schema Additions (from B.5-B.6)
+
+### 7.1 Intelligence Amplification Result Schemas (Provider: Vol 5, Consumers: Vol 2)
+Location: `atlas/intelligence/schemas.py`
+- `AmplificationResult` — `analogies: list[StructuralAnalogy]` (max 3), `challenges: list[SocraticChallenge]` (max 2), `related_gaps: list[ResearchGap]` (max 3), `recommendations: dict[str, list[str]]`. Frozen.
+- `CrossDomainResult` — `success: bool`, `original: str`, `transferred: str`, `analogy: StructuralAnalogy | None`, `confidence: CalibratedConfidence | None`, `provenance: ProvenanceChain | None`, `caveats: list[str]`. Frozen.
+- `ChallengeResult` — `claim: str`, `challenges: list[SocraticChallenge]`, `challenge_count: int`, `user_challenge_history: dict[str, int]`. Frozen.
+- `ResearchAgenda` — `domain: str`, `user_mastery: float`, `gaps: list[ResearchGap]`, `hypotheses: list[Hypothesis]`, `suggested_next_steps: list[str]`. Frozen.
+- `IntellectualSummary` — `profile: IntellectualProfile`, `growth_summary: dict`, `recommendations: dict[str, list[str]]`, `active_challenges: int`. Frozen.
+
+### 7.2 Voice Schemas (Provider: Vol 6, Consumers: Vol 7, 8)
+Location: `atlas/voice/schemas.py`
+- `VoiceControllerConfig` — stt_engine, tts_engine, speaker_verification_enabled, threshold (0.5-0.95), max_query_length (≤10000), session_timeout (30-3600s)
+- `VoiceSession` — session_id (UUID4), device_id, started_at, query_count, speaker_verified, active
+- `VoiceResponse` — transcript, response_text, audio (b64 optional), session_id, metadata
+- `VoiceInteractionEpisode` — user_input, assistant_response, duration_seconds, engines, confidence, session_id
+- `TTSEngine` Protocol — `synthesize(text, speed) -> tuple[bytes, TTSMetadata]`, `synthesize_stream(text) -> AsyncIterator[bytes]`, `is_initialized`, `initialize()`
+- `STTEngine` Protocol — `transcribe(audio_bytes, sample_rate) -> STTResult`, `is_available`
+
+### 7.3 Tool Schemas (Provider: Vol 10, Consumers: Vol 2, 8)
+Location: `atlas/tools/schemas.py`
+- `SecurityClassification` enum — SAFE, REQUIRES_CONFIRMATION, DANGEROUS
+- `ToolDefinition` (frozen) — `name` (snake_case regex), `description` (10-500 chars), `handler: Callable`, `parameter_schema: type[BaseModel]`, `result_schema: type[BaseModel] | None`, `security: SecurityClassification`, `category: str`, `tags: list[str]`, `timeout: float` (0-300s)
+- `ToolResult` (frozen) — `success: bool`, `result: Any`, `error: str | None`, `tool_name: str`, `execution_time_ms: float`
+- 14 parameter schemas for core tools (FileReadParams, FileWriteParams, FileEditParams, FileListParams, FileSearchParams, CodeSearchParams, GitStatusParams, GitLogParams, MemoryQueryParams, MemoryStoreFactParams, MemoryStorePreferenceParams, WebSearchParams, FetchWebpageParams, ToolListParams)
+
+### 7.4 Shared Utility Module (Provider: Vol 8, Contributors: Vol 5, 9)
+Location: `atlas/shared/text.py` (per C-24 resolution)
+- `scrub_speculation(text: str) -> str` — deterministic regex replacement of hedging language (contributed by Vol 9)
+- `detect_contradiction(claim_a: str, claim_b: str, semantic_search: Callable | None) -> bool` — two-layer detection: negation heuristic + semantic check (contributed by Vol 5)
+
+### 7.5 Console TypeScript Interfaces (Provider: Vol 8 codegen, Source: Vol 2/8/9, Consumers: Vol 7)
+Location: `shared/types/` (generated from Pydantic via `contracts/generate_ts_types.py`)
+- `ChatMessage`, `ThinkingStep`, `ToolCall`, `Session`, `ComponentHealth`, `TelemetryPayload`, `MemoryLayer`, `MemoryEntry`
+- Generated from backend Pydantic schemas. Manual bootstrap types in Vol 7 B.3.4 are replaced by generated types once codegen is operational.
+
+---
+
 ## Modification History
 
 | Version | Date | Modified By | Summary | Laymen Summary |
 |---|---|---|---|---|
 | v1 | 2026-03-10 | Integration Gate Agent | Initial creation — synthesized interface contracts from all 10 volumes into 5 sections: shared schemas, API boundaries, memory layer access, event contracts, and shared infrastructure | Created the master contract document that all subsystem rebuild agents must follow |
+| v2 | 2026-03-11 | Integration Gate Agent (Final Review) | Phase 2 additions: Section 6 (response field mapping and SSE event contracts per C-23/C-22), Section 7 (new schemas from B.5-B.6: intelligence results, voice, tools, shared text utilities, console TS interfaces). Updated Vol 6→Vol 2 contract name per C-18. | Added the detailed data model contracts discovered during deep-dive sections |

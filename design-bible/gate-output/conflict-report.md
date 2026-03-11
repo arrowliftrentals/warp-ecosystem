@@ -3,16 +3,16 @@
 | Field | Value |
 |---|---|
 | **Doc ID** | `DB-G01-001` |
-| **Name** | Phase 1 Conflict Report |
-| **Purpose** | Exhaustive inventory of cross-volume conflicts detected during Integration Gate review |
+| **Name** | Phase 1 + Phase 2 Conflict Report |
+| **Purpose** | Exhaustive inventory of cross-volume conflicts detected during Integration Gate review (Phase 1 B.1-B.4 + Phase 2 B.5-B.13) |
 | **Owner** | Design Bible / Integration Gate |
 | **Status** | `active` |
 | **Supersedes** | N/A |
 | **Superseded by** | N/A |
 | **Author** | Integration Gate Agent |
-| **Version** | v1 |
+| **Version** | v2 |
 | **Created** | 2026-03-10 |
-| **Last Modified** | 2026-03-10 |
+| **Last Modified** | 2026-03-11 |
 
 ---
 
@@ -193,12 +193,101 @@
 
 ---
 
+## Phase 2 Conflicts (B.5-B.13)
+
+### C-18: process_query vs process_message Naming (Vol 2 vs Vol 6 vs Vol 8)
+**What:** Vol 6 B.3 references `OrchestratorEngine.process_query(query, session_id)`. Vol 8 B.6 maps `ChatRequest.query → ConversationEngine.process_message(message, session_id, device_id)`. Class name (OrchestratorEngine vs ConversationEngine) and method name (process_query vs process_message) both differ.
+**Volumes:** 2 vs 6 vs 8
+**Evidence:**
+- Vol 6 B.3: `OrchestratorEngine.process_query(query: str, session_id: str) -> str`
+- Vol 8 B.6: Maps `ChatRequest.query` to `ConversationEngine.process_message(message=query, ...)`
+- Vol 2 B.3.1: `ConversationEngine.process_message(message, session_id, device_id)`
+**Recommended resolution:** Vol 2 owns the canonical name: `ConversationEngine.process_message()`. Vol 6 must update its B.3 dependency reference from `OrchestratorEngine.process_query()` to `ConversationEngine.process_message()`. Vol 8 mapping is correct.
+**Status:** resolved
+**Resolution:** Approved as recommended. `ConversationEngine.process_message()` is canonical. Vol 6 updates its reference.
+
+### C-19: IntellectualProfile as First-Class L9 Field (Vol 1 vs Vol 5)
+**What:** Vol 5 B.10 L-INT-05 requires IntellectualProfile to become a first-class field on the L9 UserProfile schema (currently nested in `metadata['intellectual_profile']`). This requires Vol 1 to add the field.
+**Volumes:** 1 vs 5
+**Evidence:**
+- Vol 5 B.10 L-INT-05: "Rebuild should make IntellectualProfile a first-class field on L9 UserProfile schema."
+- Vol 5 B.13 criterion 9: Deducted 1pt noting "IntellectualProfile L9 field needs Vol 1 change."
+- Vol 1 B.6: UserProfile schema does not currently include IntellectualProfile as a field.
+**Recommended resolution:** Vol 1 adds `intellectual_profile: IntellectualProfile | None = None` to the L9 UserProfile schema when Vol 5 is built (Phase 4). Not blocking for Tier 0-3.
+**Status:** resolved
+**Resolution:** Approved as recommended. Deferred to Phase 4. Vol 1 will add the field when Vol 5 begins implementation.
+
+### C-20: Governance Schema Migration Path (Vol 1 → Vol 9)
+**What:** Vol 9 B.6 specifies all governance schemas live in `governance/schemas.py`. But these schemas currently reside in `src/memory/schemas.py` (Vol 1). C-01 resolved ownership but the migration path and timing are unspecified.
+**Volumes:** 1 vs 9
+**Evidence:**
+- C-01 resolution: "Vol 9 owns governance schemas. Vol 1 owns data-at-rest schemas."
+- Vol 9 B.6: "All governance Pydantic schemas live in `atlas/governance/schemas.py` per C-01 resolution."
+- Vol 9 B.3 Dependency 1: Acknowledges schemas "currently defined in `src/memory/schemas.py` owned by Volume 1."
+**Recommended resolution:** During Tier 0 implementation, create `governance/schemas.py` with Vol 9's schema definitions. Vol 1 removes governance schemas from its file. No re-export needed — all consumers import from `governance/schemas.py` directly. This must happen as the first coordination step.
+**Status:** resolved
+**Resolution:** Approved as recommended. Tier 0 task: create governance schema file, update all imports.
+
+### C-21: OperationalDiagnostician Implementation Approach (Vol 5 vs Vol 9)
+**What:** Vol 5 B.11 D-INT-04 transfers OperationalDiagnostician to Vol 9 as a standalone component per C-08. Vol 9 B.12 plans to absorb it into DecisionValidator at Tier 4+ rather than maintaining it as a separate component.
+**Volumes:** 5 vs 9
+**Evidence:**
+- Vol 5 B.11 D-INT-04: "Move diagnostician + evaluator to Vol 9 (Governance)."
+- Vol 9 B.12: "Incorporate health truthfulness validation into DecisionValidator as a Tier 4+ feature, not as a separate component."
+- C-08 resolution: "Diagnostician + InvariantEvaluator → Vol 9."
+**Recommended resolution:** Vol 9 owns the capability (per C-08). The implementation approach (standalone vs. absorbed into DecisionValidator) is Vol 9's decision. Vol 9's absorption approach is preferred — fewer components, less maintenance. Vol 5 does not need to specify the implementation form.
+**Status:** resolved
+**Resolution:** Approved as recommended. Vol 9 absorbs diagnostics into DecisionValidator at Tier 4+.
+
+### C-22: Undocumented SSE Event Types (Vol 2 vs Vol 7 vs Vol 8)
+**What:** Vol 7 B.11 D7 identifies `engagement_step` and `implementation_event` SSE event types consumed by the console but not documented in Vol 2 or Vol 8 shared contracts. Vol 8 B.6 defines 6 SSE event types (THINKING, TOOL_CALL, TOOL_RESULT, CHUNK, DONE, ERROR) — the two extra types are not listed.
+**Volumes:** 2 vs 7 vs 8
+**Evidence:**
+- Vol 7 B.11 D7: "The SSE parser in ChatPanel.tsx handles engagement_step and implementation_event event types … not documented in any backend API spec."
+- Vol 8 B.6: StreamEvent type field is `Literal["THINKING", "TOOL_CALL", "TOOL_RESULT", "CHUNK", "DONE", "ERROR"]` — only 6 types.
+**Recommended resolution:** Decide at implementation time: (a) if these event types are needed in the rebuild, add them to Vol 8's StreamEvent Literal type and document in shared-contracts.md, or (b) if they are Attempt 3 artifacts, remove support from the console SSE parser. The programming agent should ask Vol 2 whether the orchestrator produces these events.
+**Status:** resolved
+**Resolution:** Deferred to programming agent. If the orchestrator produces these events, Vol 8 must document them. If not, Vol 7 removes support.
+
+### C-23: ChatResponse Field Rename Contract (Vol 2 vs Vol 8)
+**What:** Vol 8 B.6 documents a field rename from `ConversationResponse.response` (Vol 2) to `ChatResponse.answer` (Vol 8). This transform is documented locally in Vol 8 but not in shared-contracts.md as a binding agreement.
+**Volumes:** 2 vs 8
+**Evidence:**
+- Vol 8 B.6: "Mapping responsibility: Route handler maps ConversationResponse (Vol 2) → ChatResponse (Vol 8). Field renames: response → answer, evidence_refs → evidence."
+- shared-contracts.md Section 2.1: Does not specify the field rename mapping.
+**Recommended resolution:** Add the mapping to shared-contracts.md Section 2.1 as a binding contract. Vol 8 owns the mapping; Vol 2 and Vol 7 must be aware of the field names they produce/consume.
+**Status:** resolved
+**Resolution:** Approved as recommended. Added to shared-contracts.md Section 6 (new section).
+
+### C-24: Speculation Scrubbing Ownership (Vol 0 vs Vol 5 vs Vol 9)
+**What:** Vol 9 B.11.1 identifies speculation scrubbing (`_scrub_speculation` regex replacements) as a system-wide concern, recommending promotion to `shared/text.py`. Vol 5 has its own text processing. No volume claims ownership of `shared/text.py`.
+**Volumes:** 0 vs 5 vs 9
+**Evidence:**
+- Vol 9 B.11.1: "Speculation scrubbing … applicable to ALL LLM-generated text in the system. Candidate for promotion to Volume 0 as a shared utility."
+- Vol 5 B.11 D-INT-02: "Two-layer contradiction detection pattern is reusable. Recommend promoting to atlas/shared/text.py."
+**Recommended resolution:** Vol 8 (Infrastructure) owns `shared/` modules per its ownership of `shared/errors.py` and `shared/config.py`. Create `shared/text.py` with speculation scrubbing (from Vol 9) and two-layer contradiction detection (from Vol 5). Vol 8 owns the file; Vol 9 and Vol 5 contribute the implementations.
+**Status:** resolved
+**Resolution:** Approved as recommended. Vol 8 owns shared/text.py. Vol 9 and Vol 5 contribute utilities.
+
+### C-25: Tool Result → EvidenceStore Integration Path (Vol 2 vs Vol 9 vs Vol 10)
+**What:** After tool execution, results must be stored in EvidenceStore (Vol 9) for claim grounding. Vol 10 produces ToolResult, Vol 2 orchestrates the tool call, and Vol 9 owns EvidenceStore. The responsibility chain (who calls `EvidenceStore.store()`) is implicit.
+**Volumes:** 2 vs 9 vs 10
+**Evidence:**
+- Vol 10 B.12 Q4: "Vol 10's ToolResult is the input … Vol 10 does not call EvidenceStore directly; Vol 2 does."
+- Vol 9 B.3 Contract 3: `EvidenceStore.store(tool_name, args, result) → EvidenceItem` consumed by Vol 2.
+- shared-contracts.md Section 2.7: Vol 9 provides EvidenceStore, Vol 2 consumes.
+**Recommended resolution:** Vol 2 (Orchestrator) calls `EvidenceStore.store()` after each tool execution in the ReAct loop. Vol 10 returns `ToolResult` to Vol 2. Vol 2 extracts `tool_name`, `arguments`, and `result` from ToolResult and passes them to EvidenceStore. This is already documented in shared-contracts.md Section 2.7 — no code change needed, just explicit acknowledgment.
+**Status:** resolved
+**Resolution:** Approved as documented. Vol 2 is the integration point. Already contracted in shared-contracts.md 2.7.
+
+---
+
 ## Summary
-- **Total conflicts:** 17
+- **Total conflicts:** 25 (17 Phase 1 + 8 Phase 2)
 - **Open:** 0
-- **Resolved:** 17 (all)
+- **Resolved:** 25 (all)
 - **Overridden:** 1 (C-06 — memory_guard assigned to Vol 1 instead of Vol 9)
-- **User action required:** None — all conflicts resolved. Phase 2 may proceed.
+- **User action required:** None — all conflicts resolved. Implementation may proceed.
 
 ---
 
@@ -207,3 +296,4 @@
 | Version | Date | Modified By | Summary | Laymen Summary |
 |---|---|---|---|---|
 | v1 | 2026-03-10 | Integration Gate Agent | Initial creation — 17 conflicts identified (13 open, 4 already resolved) across schema ownership, component boundaries, endpoint conventions, and naming | Created the master list of disagreements between subsystem designs that must be resolved before coding begins |
+| v2 | 2026-03-11 | Integration Gate Agent (Final Review) | Added 8 Phase 2 conflicts (C-18 through C-25) covering naming mismatches, schema migration, undocumented events, field rename contracts, shared utility ownership, and tool-evidence integration path — all resolved | Added new disagreements found during the deep-dive design sections and resolved them all |
