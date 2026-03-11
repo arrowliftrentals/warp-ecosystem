@@ -46,8 +46,7 @@ Fill out B.5 through B.13:
 - **B.13 Design Quality Scorecard** — MANDATORY. Score all 9 criteria (1-5). Minimum passing: 30/45.
 
 ## Constraints
-- **Before your first commit**, run: `bash scripts/install-hooks.sh` — this installs the doc standard pre-commit hook. Commits with non-compliant markdown will be blocked.
-- Shared contracts from `{{CONTRACTS_PATH}}` are binding. If your design contradicts a contract, the contract wins. To request a contract change, flag it in your per-volume agent-comm file.
+- Shared contracts from `{{CONTRACTS_PATH}}` are binding.
 - Every file in the source manifest must be read in full by the end of Phase 2.
 - B.12 must mention every item from A.4 (Known Failures & Warnings). Missing items = INCOMPLETE.
 - B.4 verdicts from Phase 1 cannot be changed without documenting the reason in B.11.
