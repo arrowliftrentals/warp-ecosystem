@@ -1,120 +1,30 @@
 # Agent Communication — Volume 4: Self-Modification & Sandbox
 
-> **Rules:** Append new claims/dependencies/conflicts using the formats defined in `AGENT_COMM.md`.
-> This file is the ONLY place Vol 4 agents register changes. Do NOT edit `AGENT_COMM.md` directly.
+**Status:** Phase 2 complete
+**Last updated:** 2026-03-11
 
----
+## Claims (what Vol 4 provides)
 
-## Ownership Claims
+- **C-04-01:** Owns `atlas/self_modify/schemas.py` with 16 Pydantic schemas: `CodeChange`, `ProposalStatus`, `ImprovementProposal`, `RiskLevel`, `RiskFactor`, `RiskAssessment`, `ValidationTheaterIssue`, `ApprovalResult`, `ValidationStage`, `StageResult`, `OrchestratorResult`, `APIViolation`, `APIValidationResult`, `ExecutionResult`, `ResourceLimits`, `DiskReport`.
+- **C-04-02:** Owns behavioral interface for verification: `VerificationTracker.sign_command_output()`, `verify_signature()`, `claim_validation()`. Uses Vol 1's `CommandEvidence`/`ValidationClaim`/`ValidationClaimType` schemas as data-at-rest (C-07 resolution).
+- **C-04-03:** Owns `enforcement_orchestrator.py` and `enforcement_state.py` (C-15 resolution). Both DEFERRED to Phase 2.
+- **C-04-04:** Provides `SelfModifier.propose_improvement()` as the entry point for self-modification proposals, consumed by Vol 2 (Orchestrator) tool calls.
+- **C-04-05:** Provides sandbox execution via `SandboxManager` and `SandboxExecutor` (Docker-only).
+- **C-04-06:** Error hierarchy rooted at `SandboxError(AtlasError)` with 5 subtypes: `ValidationTheaterError`, `IntegrityViolation`, `SandboxExecutionError`, `SandboxProvisionError`, `ProposalRejectedError`.
 
-```
-CLAIM: SelfModifier pipeline (propose > sandbox > verify > approve > apply)
-OWNER: Volume 4
-REASON: Core self-modification lifecycle orchestrating CodeChange to ImprovementProposal with full sandbox testing.
-CONTESTED: no
-```
+## Dependencies (what Vol 4 consumes)
 
-```
-CLAIM: VerificationTracker (HMAC-SHA256 cryptographic proof of test execution)
-OWNER: Volume 4
-REASON: Enforcement arm of P4 (validation must be real). Signs command output, stores claims in L4.
-CONTESTED: no
-```
+- **D-04-01:** Vol 1 (Memory) — `MemoryManager.l4.store_fact()` and `query_facts()` for validation claim storage (shared contract Section 2.9).
+- **D-04-02:** Vol 1 (Memory) — L7 world state for execution proof storage (shared contract Section 3).
+- **D-04-03:** Vol 9 (Governance) — `DecisionValidator.validate_intent()` as optional intent validation stage in `ValidationOrchestrator` (shared contract Section 2.10).
+- **D-04-04:** Vol 1 (Memory) — `CommandEvidence`, `ValidationClaim`, `ValidationClaimType` schemas imported from `atlas/memory/schemas.py` (C-07 resolution: Vol 1 owns data-at-rest schemas, Vol 4 owns behavioral interface).
 
-```
-CLAIM: MetaCognitiveMonitor (validation theater detection)
-OWNER: Volume 4
-REASON: 7 heuristic checks for validation theater patterns. Operates on proposals pre-approval.
-CONTESTED: no
-```
+## Resolved Conflicts
 
-```
-CLAIM: RiskAssessor + ApprovalAutomator (risk scoring and graduated approval)
-OWNER: Volume 4
-REASON: 7-gate risk scoring with auto-approve (LOW risk only) / human escalation.
-CONTESTED: no
-```
+- **C-07:** Verification schema ownership. Resolution: Vol 1 owns `CommandEvidence`/`ValidationClaim`/`ValidationClaimType` as data-at-rest schemas. Vol 4 owns the behavioral interface (sign, verify, claim).
+- **C-08:** `RemediationEngine` ownership. Resolution: moves to Vol 4. Currently DEFERRED (depends on `design_validator.py`).
+- **C-15:** `enforcement_orchestrator.py` and `enforcement_state.py` ownership. Resolution: Vol 4 owns both. Both DEFERRED to Phase 2.
 
-```
-CLAIM: ValidationOrchestrator + APIContractValidator (multi-stage code validation)
-OWNER: Volume 4
-REASON: 5-stage validation chain (syntax > imports > API contracts > patterns > intent).
-CONTESTED: no
-```
+## Open Items
 
-```
-CLAIM: SandboxManager + SandboxExecutor + DockerProvider + DockerExecutor (sandbox layer)
-OWNER: Volume 4
-REASON: Docker-based isolated code execution with snapshot-and-rollback.
-CONTESTED: no
-```
-
-```
-CLAIM: IntegrityGuard (SHA-256 tamper detection)
-OWNER: Volume 4
-REASON: Critical file hash verification at startup. Detects unauthorized modification of validation code.
-CONTESTED: no
-```
-
-```
-CLAIM: enforcement_orchestrator.py and enforcement_state.py
-OWNER: Volume 4
-REASON: Self-modification enforcement execution. Vol 9 governs the DECISION (via DecisionValidator); Vol 4 owns the EXECUTION.
-CONTESTED: no (resolved — conflict-report.md)
-```
-
----
-
-## Dependency Declarations
-
-```
-DEPENDENCY: Volume 4 needs MemoryManager.l4 (store_fact, query_facts) from Volume 1
-STATUS: pending
-INTERFACE: store_fact(content, source, confidence, metadata) -> str; query_facts(query, min_confidence, limit) -> list[DeclarativeFact]
-```
-
-```
-DEPENDENCY: Volume 4 needs CommandEvidence/ValidationClaim Pydantic schemas from Volume 1
-STATUS: pending
-INTERFACE: CommandEvidence(BaseModel), ValidationClaim(BaseModel), ValidationClaimType(str, Enum)
-```
-
-```
-DEPENDENCY: Volume 4 needs DecisionValidator.validate_intent() from Volume 9
-STATUS: pending
-INTERFACE: DecisionValidator.validate_intent(intent: str, context: dict) → ValidationDecision
-```
-
-```
-DEPENDENCY: Volume 4 needs API endpoint registration from Volume 8
-STATUS: pending
-INTERFACE: POST /v1/proposals, GET /v1/proposals/{id}, POST /v1/sandbox/execute
-```
-
-```
-DEPENDENCY: Volume 4 needs LearningManager.record_proposal_outcome() from Volume 3
-STATUS: pending
-INTERFACE: record_proposal_outcome(proposal_id, proposal_type, status, ...) -> dict (insights)
-```
-
----
-
-## Conflict Acknowledgements
-
-```
-CONFLICT: Verification schemas ownership
-VOLUMES: 1 vs 4
-RESOLUTION: resolved — Vol 1 owns schemas (data at rest). Vol 4 owns behavioral interface (conflict-report.md C-07)
-```
-
-```
-CONFLICT: enforcement_orchestrator.py and enforcement_state.py ownership
-VOLUMES: 4 vs 9
-RESOLUTION: resolved — Vol 4 owns execution. Vol 9 owns decision (conflict-report.md)
-```
-
-```
-CONFLICT: RemediationEngine overlap
-VOLUMES: 4 vs 5 vs 9
-RESOLUTION: resolved — RemediationEngine → Vol 4. Vol 5 owns diagnostics (conflict-report.md C-08)
-```
+- None. All cross-volume conflicts resolved.

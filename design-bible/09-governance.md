@@ -6,13 +6,13 @@
 | **Name** | Volume 9: Governance & Validation |
 | **Purpose** | Design specification for the constitutional enforcement layer — intent validation, output governance, and boundary compliance |
 | **Owner** | Design Bible / Volume 9 |
-| **Status** | `draft` |
+| **Status** | `phase-2-complete` |
 | **Supersedes** | N/A |
 | **Superseded by** | N/A |
 | **Author** | Oz (Part A) / Distillation Agent V9 (Part B) |
-| **Version** | v5 |
+| **Version** | v6 |
 | **Created** | 2026-03-10 |
-| **Last Modified** | 2026-03-10 |
+| **Last Modified** | 2026-03-11 |
 
 ---
 
@@ -321,31 +321,323 @@ Every component from A.2 receives a verdict. Rebuild target paths assume a `gove
 - Rationale: These files implement self-modification enforcement (EnforcementOrchestrator, EnforcementState). Self-modification security belongs to Volume 4 (Self-Modification), not Volume 9 (Governance). Volume 4 already claims SelfModifier pipeline, VerificationTracker, and related enforcement in AGENT_COMM.md. Volume 9 governs the DECISION to allow self-modification (via DecisionValidator); Volume 4 owns the EXECUTION of self-modification enforcement.
 
 ### B.5 Technology Choices
-*[To be filled by distillation agent]*
+
+**Language & Runtime:** Python 3.11+ (required for `X | None` type hints, per PROJECT_CONVENTIONS.md).
+
+**Libraries:**
+
+| Library | Purpose | Justification |
+|---|---|---|
+| `pydantic` v2 | Schema validation for GovernedOutput, ExtractedClaim, EvidenceItem, ValidationDecision, ContractResult, EvidenceContract, and all enums | P8 mandate — Pydantic at every boundary. v2 for performance (Rust core). |
+| `structlog` | Structured JSON logging | PROJECT_CONVENTIONS.md Section 7. Replaces `loguru` used in Attempt 3. All governance log entries must include `subsystem="governance"` plus operation-specific context. |
+| `hashlib` (stdlib) | SHA256 integrity hashing for GovernedOutput.content_sha256 and EvidenceItem.result_sha256 | No external dependency needed. SHA256 used for content tamper detection and evidence provenance. |
+| `re` (stdlib) | Regex-based claim extraction and speculation scrubbing | Deterministic, no ML dependency. ClaimExtractor uses 12+ compiled patterns; SpeculationScrubber uses 25+ replacement patterns. Pure regex avoids LLM dependency (P1 alignment). |
+| `uuid` (stdlib) | EvidenceItem ID generation | UUID4 for collision-free per-request item IDs. |
+| `json` (stdlib) | Evidence blob serialization for hashing and size measurement | Used in EvidenceStore for args hashing, result serialization, and pruning size calculations. |
+
+**Departures from defaults:**
+- `dataclass` → `pydantic.BaseModel`: Attempt 3 used `@dataclass` for `ValidationDecision`. The rebuild uses Pydantic `BaseModel` for consistency with P8 and to gain validation, serialization, and `model_config = {"frozen": True}` immutability for all governance output types.
+- `loguru` → `structlog`: Per PROJECT_CONVENTIONS.md. All governance modules must replace `from loguru import logger` with `from atlas.shared.logging import log`.
+
+**Storage:** No persistent storage owned by this subsystem. EvidenceStore is ephemeral (per-request, in-memory `dict[str, EvidenceItem]`). EvidenceContractRegistry is loaded from configuration at startup (static contract definitions). If governance audit trails are needed, they are written to L3 (episodic memory) via Volume 1's MemoryManager — Volume 9 does not own a database.
+
+**No ML dependencies:** The entire governance subsystem is deterministic and symbolic. Claim extraction uses regex. Confidence scoring uses arithmetic. Speculation scrubbing uses regex replacements. This is by design — governance cannot depend on the components it governs (P1).
 
 ### B.6 Data Model
-*[To be filled by distillation agent]*
+
+All governance Pydantic schemas live in `atlas/governance/schemas.py` per C-01 resolution. These schemas are the authoritative definitions — no other volume redefines them.
+
+**Enums:**
+
+`AuthorityLevel(str, Enum)` — Confidence tier for governed output.
+- `GROUNDED` — All verifiable claims are SUPPORTED by evidence.
+- `ADVISORY` — At least 50% of verifiable claims SUPPORTED, or no verifiable claims present.
+- `SPECULATIVE` — Below 50% support ratio, or pipeline error fallback.
+
+`ClaimType(str, Enum)` — Category of factual claim.
+- `QUANTITATIVE` — Numbers, counts, percentages, durations.
+- `EXISTENCE` — File paths, class names, function names, URLs.
+- `LOCATION` — Line numbers, character offsets.
+- `PROCEDURE` — Action verbs asserting something was done ("created", "deleted", "passed").
+- `CAPABILITY` — Self-referential assertions ("I can", "Atlas supports").
+- `CAUSAL` — Cause-effect claims ("because", "due to").
+- `POLICY` — Normative language ("must", "should", "required").
+
+`ClaimStatus(str, Enum)` — Verification result for a claim.
+- `SUPPORTED` — Claim matched against evidence in EvidenceStore.
+- `UNSUPPORTED` — Claim has no matching evidence; will be hedged/downgraded.
+- `UNVERIFIABLE` — Initial status before grounding; also for claims that cannot be checked.
+- `SUBJECTIVE` — CAPABILITY, CAUSAL, POLICY claims that are opinion-like; excluded from support ratio.
+
+`OutputPhase(str, Enum)` — Which pipeline phase produced the output.
+- `THINK` — Internal reasoning (never shown to user).
+- `OBSERVE_SUMMARY` — Tool result summary.
+- `REFLECT` — Self-critique phase.
+- `ANSWER` — Final user-facing answer.
+- `COUNCIL_SYNTHESIS` — Multi-model consensus output.
+
+`ValidationResult(str, Enum)` — Intent validation outcome.
+- `SAFE` — Proceed with execution.
+- `UNSAFE` — Block execution.
+- `NEEDS_REVIEW` — Requires human confirmation.
+- `NEEDS_USER_INPUT` — Needs clarification from user.
+
+**Core Schemas:**
+
+`ValidationDecision(BaseModel, frozen=True)` — Result of DecisionValidator.
+Fields:
+- `result: ValidationResult` — Overall outcome.
+- `confidence: float` — Field(ge=0.0, le=1.0). Confidence in the decision.
+- `safety_score: float` — Field(ge=0.0, le=1.0). Safety assessment.
+- `reasons: list[str]` — Explanations for the decision.
+- `suggestions: list[str]` — Alternative actions or clarification requests.
+- `blocked_reasons: list[str]` — Specific blocking reasons if UNSAFE/NEEDS_REVIEW.
+Methods:
+- `is_safe() -> bool` — Returns `result == ValidationResult.SAFE`.
+- `needs_user_input() -> bool` — Returns `result in {NEEDS_REVIEW, NEEDS_USER_INPUT}`.
+Validation: Confidence and safety_score constrained to [0.0, 1.0] via Field.
+
+`ExtractedClaim(BaseModel)` — A single factual claim extracted from LLM output. Mutable (status updated during grounding/verification).
+Fields:
+- `text: str` — The claim text as extracted.
+- `claim_type: ClaimType` — Classification of the claim.
+- `source_span: tuple[int, int]` — Character offsets (start, end) in original content.
+- `status: ClaimStatus` — Default UNVERIFIABLE, updated during pipeline.
+- `grounding_refs: list[str]` — EvidenceItem IDs supporting this claim. Default empty.
+- `verification_method: str` — How verification was performed (e.g., "evidence_file_match", "evidence_number_fuzzy"). Default empty string.
+Validation: source_span[0] < source_span[1].
+
+`EvidenceItem(BaseModel, frozen=True)` — Verbatim tool result stored for claim grounding.
+Fields:
+- `id: str` — UUID4 string.
+- `correlation_id: str` — Request scope identifier.
+- `tool_name: str` — Which tool produced this (min_length=1).
+- `args_hash: str` — SHA256 of serialized tool arguments.
+- `result_blob: Any` — Verbatim tool output (any JSON-serializable type).
+- `result_sha256: str` — SHA256 of serialized result_blob.
+- `timestamp: datetime` — When evidence was stored.
+Validation: tool_name cannot be empty.
+
+`GovernedOutput(BaseModel, frozen=True)` — Single egress schema for ALL user-facing text.
+Fields:
+- `phase: OutputPhase` — Which pipeline phase produced this.
+- `authority_level: AuthorityLevel` — Confidence tier.
+- `content: str` — Governed text (the ONLY text allowed to reach the user).
+- `content_sha256: str` — SHA256 of content for tamper detection.
+- `claims: list[ExtractedClaim]` — Extracted and verified claims. Default empty.
+- `grounding_refs: list[str]` — All EvidenceItem IDs referenced. Default empty.
+- `approval: str` — One of "approved", "revise", "blocked". Constrained via field validator.
+- `policy_violations: list[str]` — Contract violation codes. Default empty.
+- `governor_latency_ms: float` — Pipeline execution time in milliseconds. Field(ge=0.0).
+Class methods:
+- `compute_hash(content: str) -> str` — Static. Returns SHA256 hex digest.
+Validation: approval must be in {"approved", "revise", "blocked"}. If approval == "blocked", content must not be shown to user (enforced by consumer, documented in contract).
+
+`EvidenceContract(BaseModel, frozen=True)` — Defines required evidence for an intent pattern.
+Fields:
+- `intent_pattern: str` — Regex pattern matched against user queries.
+- `required_evidence: list[str]` — Evidence types that must be present.
+- `required_tools: list[str]` — Tools that must have been called (any-of match).
+- `failure_action: str` — One of "block_answer", "flag_insufficient", "inject_disclaimer". Constrained via Literal type.
+
+`ContractResult(BaseModel)` — Result of checking query against EvidenceContracts.
+Fields:
+- `satisfied: bool` — Whether all matched contracts are satisfied. Default True.
+- `violated_contracts: list[str]` — Intent patterns of violated contracts. Default empty.
+- `missing_evidence: list[str]` — Evidence types not found. Default empty.
+- `missing_tools: list[str]` — Tools not called. Default empty.
+- `recommended_action: Literal["block_answer", "flag_insufficient", "inject_disclaimer", "none"]` — Strictest failure action. Default "none".
+
+**Cross-subsystem schema notes:**
+- `GovernedOutput` is consumed by Volume 2 (orchestrator response path), Volume 6 (voice output), Volume 7 (console display), and Volume 8 (API response serialization).
+- `ValidationDecision` is consumed by Volume 2 (intent routing) and Volume 4 (self-modification approval).
+- `EvidenceItem` is produced by Volume 2 (after tool execution in ReAct loop) and consumed by Volume 9 (AnswerGovernor grounding).
 
 ### B.7 Error Handling
-*[To be filled by distillation agent]*
+
+All governance errors inherit from the shared hierarchy in `atlas/shared/errors.py` per P5 and PROJECT_CONVENTIONS.md Section 6.
+
+**Error types owned by Volume 9:**
+
+`GovernanceViolation(AtlasError)` — A governance rule was violated. Blocks execution.
+- Raised when: DecisionValidator returns UNSAFE and `allow_override=False`; AnswerGovernor produces `approval="blocked"`; EvidenceContract check fails with `failure_action="block_answer"`.
+- Fields: `rule: str` (which governance rule), `violation_detail: str`, `suggested_action: str`.
+- Propagation: Raised to caller (Volume 2 orchestrator). Never swallowed. The orchestrator must either block the operation or present the violation to the user.
+
+`ValidationError(AtlasError)` — Pydantic schema validation failed on governance input/output.
+- Raised when: GovernedOutput, ValidationDecision, EvidenceItem, or ContractResult fails Pydantic validation.
+- Propagation: Raised immediately. Indicates a programming error (malformed data), not a user error.
+
+**Error handling patterns in governance modules:**
+
+1. **AnswerGovernor.govern()**: Pipeline errors (claim extraction failure, grounding failure) are caught, logged with `log.warning("pipeline_error", ...)`, and the governor falls back to `AuthorityLevel.SPECULATIVE` with empty claims. The output is still governed (it passes through GovernedOutput schema) but at reduced authority. This is a degraded-but-safe pattern, not silent failure.
+
+2. **DecisionValidator**: Never raises on valid input. Returns `ValidationDecision(result=UNSAFE, ...)` as the fail-safe default for unrecognized patterns. Invalid input (None command, empty dict) raises `ValidationError`.
+
+3. **EvidenceStore.store()**: Raises `ValueError` if `tool_name` is empty. Truncation of oversized results (>256KB) is logged as warning but does not raise — the truncated result is still stored. Pruning of oldest items is logged as debug.
+
+4. **EvidenceContractRegistry.check()**: Returns `ContractResult(satisfied=True)` for empty queries (fail-open for non-queries). Contract compilation errors (invalid regex in intent_pattern) raise at registry initialization, not at check time.
+
+5. **ClaimExtractor.extract_claims()**: Returns empty list for empty content. Regex compilation happens at module load time; pattern match errors during extraction are logged and the pattern is skipped (individual claim extraction is non-fatal).
+
+**Forbidden patterns (per P5):**
+- No `except: pass` anywhere in governance code.
+- No bare `except Exception: pass`.
+- All exception handlers must log with context: `log.error("event_name", error=str(e), tool_name=..., claim_type=..., ...)`.
+- Pipeline fallback (SPECULATIVE) must always be logged so the degradation is visible.
 
 ### B.8 Testing Strategy
-*[To be filled by distillation agent]*
+
+**Acceptance Tests (MANDATORY — gate deployment per P11):**
+
+All acceptance tests hit the live server. No mocks at governance boundaries.
+
+1. **test_governed_response**: Send `{"query": "How many lines in src/atlas/shared/errors.py?"}` to `POST /v1/atlas/chat`. Verify the response: (a) `governed: true` in ChatResponse, (b) at least one `evidence` entry referencing a file_read tool, (c) any quantitative claim in the response matches the evidence. This proves MVA-2 (evidence-grounded response). If AnswerGovernor is deleted/stubbed, this test fails.
+
+2. **test_ungoverned_blocked**: Temporarily disable AnswerGovernor (if feature-flagged). Send any query. Verify the response either (a) includes `governed: false` with a system warning, or (b) fails with a GovernanceViolation. This proves output governance cannot be silently bypassed.
+
+3. **test_destructive_blocked**: Send `{"query": "delete all files in the project"}` to `POST /v1/atlas/chat`. Verify the response indicates the action was blocked or requires confirmation (ValidationResult.NEEDS_REVIEW or UNSAFE). This proves DecisionValidator is wired into the conversation loop.
+
+4. **test_evidence_round_trip**: In an integration test (not full HTTP), create an EvidenceStore, store a tool result, create an AnswerGovernor, govern a response containing a quantitative claim matching the evidence. Verify the claim has status=SUPPORTED and authority_level=GROUNDED. This proves the grounding pipeline works end-to-end.
+
+5. **test_contract_violation**: Store no evidence. Govern a response to a query matching an EvidenceContract (e.g., "read the file src/main.py"). Verify ContractResult.satisfied is False and the appropriate failure_action is applied. This proves omission detection works.
+
+**Integration Tests:**
+
+6. **test_claim_extraction_coverage**: Feed 20+ representative LLM output strings (containing file paths, line numbers, percentages, action verbs, capability assertions, causal language, policy language). Verify each produces the expected claim types with correct source_span offsets. This regression-tests the regex patterns.
+
+7. **test_speculation_scrubber**: Feed 10+ strings containing speculative language ("likely", "probably", "seems to be", "may be"). Verify all are replaced by assertive equivalents or removed. Verify non-speculative content is unchanged.
+
+8. **test_evidence_pruning**: Store items exceeding MAX_STORE_BYTES (2MB). Verify oldest items are pruned with tombstones. Verify remaining items have intact SHA256 hashes.
+
+9. **test_confidence_model_signals**: Create EvidenceStore with known items. Create claims with known statuses. Compute confidence. Verify the score matches expected value within 0.01 tolerance. Test edge cases: no evidence (score=0.0), all claims supported (score near 1.0).
+
+10. **test_validator_bert_agreement**: Provide matching and mismatching BERT + symbolic intents to DecisionValidator.validate(). Verify confidence boost on agreement and confidence reduction on disagreement.
+
+**Unit Tests:**
+
+11. `test_validation_decision_immutable` — Verify `ValidationDecision` fields cannot be mutated after creation (frozen=True).
+12. `test_governed_output_hash_integrity` — Verify `GovernedOutput.compute_hash()` produces consistent SHA256 for same content.
+13. `test_evidence_item_empty_tool_name` — Verify `EvidenceStore.store("", ...)` raises ValueError.
+14. `test_contract_result_action_severity` — Verify block_answer > flag_insufficient > inject_disclaimer > none ordering.
+15. `test_authority_computation` — Verify GROUNDED requires 100% support, ADVISORY ≥50%, SPECULATIVE <50%.
+
+**Regression tests from A.4 failures:**
+
+16. **test_no_raw_llm_to_user**: Instrument the response path. Verify every string reaching the user has passed through GovernedOutput schema validation. This directly addresses A.4 Warning #1 (ungoverned LLM output in Attempt 3 where 4 ReAct call sites had no governance).
 
 ### B.9 Configuration
-*[To be filled by distillation agent]*
+
+Governance configuration is loaded via `AtlasConfig(BaseSettings)` from `atlas/shared/config.py` with `ATLAS_` prefix per PROJECT_CONVENTIONS.md Section 8.
+
+**Configuration fields (all have safe defaults):**
+
+| Field | Type | Default | Env Var | Description |
+|---|---|---|---|---|
+| `governance_strict_mode` | `bool` | `True` | `ATLAS_GOVERNANCE_STRICT_MODE` | When True, UNSAFE validations block execution. When False, they log warnings only. |
+| `governance_require_confirmation` | `list[str]` | `["destructive_operations", "self_modification", "device_management"]` | `ATLAS_GOVERNANCE_REQUIRE_CONFIRMATION` | Operation categories requiring user confirmation. |
+| `governance_allow_override` | `bool` | `True` | `ATLAS_GOVERNANCE_ALLOW_OVERRIDE` | Whether blocked operations can be overridden with user confirmation. |
+| `evidence_max_item_bytes` | `int` | `262144` (256KB) | `ATLAS_EVIDENCE_MAX_ITEM_BYTES` | Maximum size per evidence item. Oversized items truncated. |
+| `evidence_max_store_bytes` | `int` | `2097152` (2MB) | `ATLAS_EVIDENCE_MAX_STORE_BYTES` | Maximum total evidence per request. Oldest items pruned when exceeded. |
+| `evidence_ttl_seconds` | `int` | `1800` (30 min) | `ATLAS_EVIDENCE_TTL_SECONDS` | Time-to-live for evidence items. |
+| `confidence_w_coverage` | `float` | `0.4` | `ATLAS_CONFIDENCE_W_COVERAGE` | Weight for evidence coverage signal in ConfidenceModel. |
+| `confidence_w_support` | `float` | `0.4` | `ATLAS_CONFIDENCE_W_SUPPORT` | Weight for claim support ratio signal. |
+| `confidence_w_freshness` | `float` | `0.2` | `ATLAS_CONFIDENCE_W_FRESHNESS` | Weight for evidence freshness signal. |
+| `grounded_threshold` | `float` | `1.0` | `ATLAS_GROUNDED_THRESHOLD` | Support ratio required for GROUNDED authority level. |
+| `advisory_threshold` | `float` | `0.5` | `ATLAS_ADVISORY_THRESHOLD` | Minimum support ratio for ADVISORY (below = SPECULATIVE). |
+| `enable_evidence_contracts` | `bool` | `False` | `ATLAS_ENABLE_EVIDENCE_CONTRACTS` | Feature flag for EvidenceContractRegistry. Off for Tier 0-1; enabled at Tier 2. |
+| `enable_confidence_model` | `bool` | `False` | `ATLAS_ENABLE_CONFIDENCE_MODEL` | Feature flag for ConfidenceModel. Off for Tier 0; enabled at Tier 1. |
+
+**Loading order:** Environment variables → `.env` file → defaults. Per `pydantic-settings` convention.
+
+**Feature flag discipline (per A.4 Warning #2):** `enable_evidence_contracts` and `enable_confidence_model` default to `False`. Unlike Attempt 3 where ALL flags were False and capabilities were dead code, the rebuild requires that any feature with its flag set to `True` must have a passing acceptance test. Flags are turned on only when the acceptance test passes.
 
 ### B.10 Subsystem Lessons Learned
-*[To be filled by distillation agent]*
+
+**10.1: ResponseValidator was correctly superseded but its failure pattern is instructive.** `response_validator.py` (424 lines) tried to fact-check LLM responses by querying system state at validation time (e.g., calling `self.atlas.memory.l1.get_stats()` to verify a memory claim). This created tight coupling to the Atlas instance, required runtime access to subsystems during validation, and could not verify claims about tool results that already happened. AnswerGovernor's evidence-based approach (store evidence during execution, verify claims against stored evidence) is fundamentally better because it decouples governance from runtime subsystem access.
+
+**10.2: Speculation scrubber regex ordering matters.** The 25+ regex patterns in `_SPECULATION_REPLACEMENTS` are ordered by specificity (longer/more-specific patterns first). In Attempt 3, a reordering bug briefly caused "most likely due to" to be partially matched by the simpler "likely" pattern, producing garbled output ("most due to"). The rebuild must preserve pattern ordering and test it with regression cases.
+
+**10.3: ValidationDecision was a dataclass, not Pydantic.** Attempt 3 used `@dataclass` for `ValidationDecision` while all other governance schemas used Pydantic. This inconsistency meant ValidationDecision lacked field-level validation (confidence could be negative, safety_score could exceed 1.0). The rebuild uses Pydantic for all governance schemas uniformly.
+
+**10.4: DecisionValidator's validate() signature was overloaded.** The method accepted `bert_result`, `symbolic_intent`, `command`, and `context` — all optional. In practice, different callers used different subsets, making the interface unclear. The rebuild should provide focused methods: `validate_command(command, classification)` for user commands, `validate_tool(tool_name, args)` for tool execution, and `validate_llm_action(suggestion, original_command)` for LLM governance. The generic `validate()` becomes a router.
+
+**10.5: EvidenceStore pruning was lossy.** Oldest-first pruning deleted evidence items needed for claim verification. The tombstone mechanism preserved SHA256 hashes but not the evidence content. If a claim references a pruned item, verification fails silently (claim stays UNSUPPORTED rather than raising an error). The rebuild should log a warning when a referenced item is pruned and consider LRU-based pruning instead of oldest-first.
+
+**10.6: Evidence contracts used any-of matching for required_tools.** A contract requiring `["file_read", "code_execution"]` was satisfied if ANY of those tools was called, not ALL. This is too permissive for contracts like "run tests" which should require code_execution evidence specifically. The rebuild should support both `any_of` and `all_of` matching modes per contract.
 
 ### B.11 Discoveries
-*[To be filled by distillation agent]*
+
+**11.1: Speculation scrubbing is a system-wide concern, not just governance.** The `_scrub_speculation` pattern (deterministic regex replacements removing hedging language like "likely", "probably", "seems to be") is applicable to ALL LLM-generated text in the system, not just user-facing answers. LLM-generated commit messages, proposal descriptions, error explanations, and learning summaries all contain speculative language that should be scrubbed. Candidate for promotion to Volume 0 as a shared utility in `atlas/shared/text.py`.
+
+**11.2: Evidence contracts create an implicit tool dependency graph.** EvidenceContracts map intent patterns to required tools. This means the contract registry implicitly defines which tools the system MUST have for each capability. If a tool is removed or renamed, contracts break silently. The rebuild should validate contracts against the tool registry at startup and warn about contracts referencing non-existent tools.
+
+**11.3: `<think>` tag stripping belongs in governance, not in the LLM provider.** AnswerGovernor strips `<think>…</think>`, `<reasoning>…</reasoning>`, and similar internal monologue tags from LLM output before governance. This is correct — the governance layer is the last checkpoint before user delivery, so it must guarantee no internal reasoning leaks. If stripping were in the LLM provider, it could be bypassed by direct LLM calls from other subsystems.
+
+**11.4: memory_guard.py is assigned to Volume 9 per C-06.** The conflict report assigns memory write validation to Volume 9. This means DecisionValidator (or a sibling `MemoryWriteValidator`) should validate data before it enters memory layers. This is a new responsibility not present in Attempt 3's governance subsystem and must be designed in the rebuild. The interface: `validate_memory_write(layer_id: str, data: BaseModel) -> ValidationDecision`.
 
 ### B.12 Oversight Self-Review
-*[To be filled by distillation agent — MANDATORY before submission]*
+
+**Q1: Does the design address every item in A.4 (Known Failures & Warnings)?**
+
+- **A.4 #1 (ADR-0031 is the blueprint):** Addressed. B.1 defines the full AnswerGovernor pipeline (extract → ground → verify → downgrade → scrub → emit). B.4 rebuilds the 7 core components. B.5 specifies the technology. B.6 defines all schemas. B.8 includes acceptance test `test_governed_response` that proves MVA-2. The graduated approach defers ConfidenceModel and EvidenceContracts to later tiers while shipping core governance at Tier 0.
+
+- **A.4 #2 (Graduated governance):** Addressed. B.1 explicitly defines the graduation strategy: Tier 0-1 = 3 hard rules (GovernedOutput, DecisionValidator, EvidenceStore), Tier 2-3 = evidence contracts + confidence thresholds, Tier 4+ = PolicyEngine. B.9 uses feature flags (`enable_evidence_contracts`, `enable_confidence_model`) that default to False. B.10.4 identifies the over-governance risk in the DecisionValidator signature.
+
+- **A.4 #3 (Voice governance as template — coordinate with Vol 6):** Addressed. B.4 KILLs `voice/governance.py` (item 11). GovernedOutput supersedes ApprovedUtterance per C-14 resolution (shared-contracts.md Section 1.2). Vol 6 consumes GovernedOutput, not a parallel governance path.
+
+- **A.4 #4 (DecisionValidator scope):** Addressed. B.1 defines DecisionValidator as the validation gate for intents, tool executions, LLM actions, and external data. B.2 shows it as the entry point in the governance data flow. B.10.4 identifies the signature overload problem and proposes focused methods. B.11.4 notes the new memory_guard responsibility from C-06.
+
+**Q2: Are there cross-volume interface mismatches with shared-contracts.md?**
+
+Verified against shared-contracts.md:
+- Section 1.2 (Governance Schemas): All 9 types listed match B.6 definitions. Location `atlas/governance/schemas.py` matches.
+- Section 2.3 (Vol 2 → Vol 9): `DecisionValidator.validate()`, `validate_intent()`, `validate_tool_execution()`, `AnswerGovernor.govern()` signatures match B.3 contracts.
+- Section 2.7 (Vol 9 → Vol 2): `EvidenceStore.store()` signature matches B.3 Contract 3.
+- Section 2.10 (Vol 4 → Vol 9): `DecisionValidator.validate_intent()` matches B.3.
+- Section 3 (Memory Layer Interface): Vol 9 accesses L4 for fact search for evidence grounding — matches B.3 Dependency 1.
+No mismatches found.
+
+**Q3: Does the design violate any Volume 0 principle?**
+
+- P1 (ML advises, symbolic decides): Compliant. AnswerGovernor is purely symbolic. DecisionValidator uses BERT results as advisory input, never executes based on them alone.
+- P4 (Validation must be real): Compliant. All validation produces `ValidationDecision` or `GovernedOutput` with auditable fields. No stub health checks.
+- P5 (Silent failure is a system fault): Compliant. B.7 forbids `except: pass`. Pipeline fallback logs warning and degrades to SPECULATIVE.
+- P8 (Pydantic at boundaries): Compliant. Every schema in B.6 is Pydantic.
+- P9 (Output governance): The entire subsystem exists to enforce this.
+- P11 (Acceptance tests gate everything): B.8 defines 5 acceptance tests.
+
+No violations found.
+
+**Q4: Are there components in A.2 that are not addressed in B.4-B.10?**
+
+All 12 A.2 files have verdicts in B.4: 7 REBUILD, 2 DEFER, 3 KILL. All REBUILD components have technology choices (B.5), data models (B.6), error handling (B.7), testing (B.8), and configuration (B.9) coverage. DEFERred components (failure_prevention_validator, policy_engine) are explicitly scoped to Tier 4-5+ with dependencies stated. KILLed components (response_validator, voice/governance, enforcement_*) have kill rationale documented.
+
+**Q5: Are any B.4 verdicts changed from Phase 1?**
+
+No B.4 verdicts are changed. All 7 REBUILD, 2 DEFER, 3 KILL decisions from Phase 1 are retained.
+
+**Q6: What is missing or incomplete?**
+
+Identified gap: **memory_guard.py is assigned to Vol 9 by C-06 but not in the A.2 source manifest.** This means the rebuild has a new responsibility (memory write validation) that was not analyzed in Phase 1. B.11.4 documents this discovery. The programming agent must design `validate_memory_write()` from scratch — there is no Attempt 3 implementation to distill from within Vol 9's files. The closest reference is `src/learning/memory_guard.py` (owned by Vol 3, which KILLed it). Recommended: add this as a Tier 2+ feature after core governance is proven.
+
+Additional gap: **OperationalDiagnostician assigned to Vol 9 by C-08** for health truthfulness checking. This component lives in `src/intelligence/` (Vol 5's manifest) and was DEFERred by Vol 5. The rebuild should incorporate health truthfulness validation into DecisionValidator as a Tier 4+ feature, not as a separate component.
 
 ### B.13 Design Quality Scorecard
-*[To be filled by distillation agent — MANDATORY. Minimum passing score: 30/45]*
+
+| # | Criterion | Score (1-5) | Justification |
+|---|---|---|---|
+| 1 | Volume 0 Alignment | 5 | Every principle (P1, P4, P5, P8, P9, P11) explicitly addressed with specific design decisions. Graduated governance (L4) is the core strategy. |
+| 2 | Interface Completeness | 4 | 5 provided contracts, 3 consumed dependencies fully specified with signatures. Memory write validation (C-06) is identified but deferred. |
+| 3 | Scope Clarity | 5 | 7 REBUILD / 2 DEFER / 3 KILL with clear rationale for each. Enforcement files correctly reassigned to Vol 4. |
+| 4 | Data Model Rigor | 5 | All schemas defined with field types, constraints, defaults, validation rules, and cross-volume consumption notes. Enums exhaustively listed. |
+| 5 | Error Handling | 4 | GovernanceViolation and ValidationError defined. All error patterns documented. Pipeline fallback is safe (SPECULATIVE). One gap: pruning-loss warning not formally specified. |
+| 6 | Testing Coverage | 5 | 5 acceptance tests covering MVA-2, bypass prevention, destructive blocking, grounding, and contracts. 5 integration tests. 5 unit tests. 1 regression test for A.4 #1. |
+| 7 | Configuration Design | 4 | 13 configuration fields with safe defaults and env var mapping. Feature flags with acceptance-test discipline. Gap: no runtime configuration reload. |
+| 8 | Lessons Specificity | 5 | 6 specific lessons from actual source code analysis (ResponseValidator failure, regex ordering, dataclass inconsistency, overloaded signature, lossy pruning, contract matching). |
+| 9 | Discovery Value | 4 | 4 discoveries: speculation scrubbing as system-wide utility, contract-tool dependency graph, think-tag governance placement, memory_guard assignment. Speculation scrubbing is promotable to Vol 0. |
+
+**Total: 41/45** (Passing threshold: 30/45)
 
 ---
 
@@ -358,3 +650,4 @@ Every component from A.2 receives a verdict. Rebuild target paths assume a `gove
 | v3 | 2026-03-10 | Oz | Added Doc ID field (`DB-V09-001`) per PROJECT_CONVENTIONS.md Section 9.4 | Added unique document number for machine searching |
 | v4 | 2026-03-10 | Oz | Added CORE/PERIPHERAL classification to A.2 Source Manifest per DISTILLATION_PROTOCOL.md Section 5 | Labeled which files agents should read in full vs. skim during Phase 1 |
 | v5 | 2026-03-10 | Distillation Agent V9 | Phase 1: Filled B.1-B.4 — subsystem purpose (3 responsibilities: intent validation, output governance, evidence grounding), architecture overview (DecisionValidator → AnswerGovernor → GovernedOutput pipeline), interface contracts (5 provided, 3 consumed), scope triage (7 REBUILD / 2 DEFER / 3 KILL) | Agent analyzed all 12 governance source files and wrote the design specification for what to rebuild, what to defer, and what to remove |
+|| v6 | 2026-03-11 | Distillation Agent V9 (Phase 2) | Phase 2: Filled B.5-B.13 — technology choices (Pydantic v2 + structlog + stdlib, no ML), data model (6 schemas + 5 enums with full field specs), error handling (GovernanceViolation + 5 module patterns), testing (5 acceptance + 5 integration + 5 unit + 1 regression), configuration (13 fields), 6 lessons, 4 discoveries, self-review (all A.4 items addressed, 2 gaps identified), scorecard 41/45 | Deep-dive agent completed the full design spec for governance subsystem |

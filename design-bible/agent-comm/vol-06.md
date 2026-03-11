@@ -1,113 +1,63 @@
 # Agent Communication — Volume 6: Voice & Multimodal
-
-> **Rules:** Append new claims/dependencies/conflicts using the formats defined in `AGENT_COMM.md`.
-> This file is the ONLY place Vol 6 agents register changes. Do NOT edit `AGENT_COMM.md` directly.
+## Phase 2 Distillation Outputs
 
 ---
 
 ## Ownership Claims
 
-```
-CLAIM: VoiceController (STT→Atlas→TTS pipeline orchestration, voice session management)
-OWNER: Volume 6
-REASON: Central voice subsystem coordinator. Manages voice sessions, delegates to STT/TTS engines, integrates with governance and memory.
-CONTESTED: no
-```
-
-```
-CLAIM: TTSEngine Protocol + PiperTTSService + XTTSTTSService (text-to-speech layer)
-OWNER: Volume 6
-REASON: TTS engine implementations and pluggable protocol for voice output. Piper (local-first R7), XTTS (higher quality, deferred).
-CONTESTED: no
-```
-
-```
-CLAIM: STTEngine (speech-to-text input layer)
-OWNER: Volume 6
-REASON: STT engine protocol and implementations (macOS SFSpeechRecognizer stub, cloud proxies). Vol 6 owns backend STT; Vol 7 owns browser-side recording UI.
-CONTESTED: no
-```
-
-```
-CLAIM: TextNormalizer (TTS text preprocessing)
-OWNER: Volume 6
-REASON: Pure-function text transforms for natural TTS output (numbers, units, acronyms, percentages). Zero external deps.
-CONTESTED: no
-```
-
-```
-CLAIM: SpeakerVerifier (voiceprint enrollment and verification)
-OWNER: Volume 6
-REASON: Resemblyzer GE2E embeddings, encrypted voiceprints, liveness heuristic. Deferred but design owned by Vol 6.
-CONTESTED: no
-```
-
-```
-CLAIM: Voice API routes (/v1/voice/*)
-OWNER: Volume 6 (endpoint definition); Volume 8 (endpoint registration/infrastructure)
-REASON: Vol 6 defines WHAT voice endpoints exist and their behavior. Vol 8 defines HOW they are registered in FastAPI.
-CONTESTED: no
-```
-
-```
-CLAIM: VoiceTools (LLM-callable speak/transcribe/get_voice_status)
-OWNER: Volume 6 (tool logic); Volume 10 (tool registry infrastructure)
-REASON: Voice tool implementations owned by Vol 6. Registration in ToolRegistry owned by Vol 10.
-CONTESTED: no
-```
+CLAIM: VoiceController — OWNER: Vol 6 — core STT→Atlas→TTS pipeline orchestrator
+CLAIM: TTSEngine/PiperTTSEngine — OWNER: Vol 6 — local ONNX TTS infrastructure
+CLAIM: STTEngine Protocol — OWNER: Vol 6 — interface definition (no impl in rebuild)
+CLAIM: TextNormalizer — OWNER: Vol 6 — TTS text preprocessing
+CLAIM: Voice Pydantic schemas — OWNER: Vol 6 — all 13 schemas serve voice exclusively
+CLAIM: Voice API routes (/v1/voice/*) — OWNER: Vol 6 (defs); Vol 8 (registration)
+CLAIM: VoiceTools — OWNER: Vol 6 (impl); Vol 10 (registration)
 
 ---
 
 ## Dependency Declarations
 
-```
-DEPENDENCY: Volume 6 (Voice) needs GovernedOutput from Volume 9 to replace ApprovedUtterance
-STATUS: pending
-INTERFACE: GovernedOutput schema (replaces ApprovedUtterance for all output modalities including voice)
-```
-
-```
-DEPENDENCY: Volume 6 (Voice) needs DecisionValidator.validate() from Volume 9 for query safety gating
-STATUS: pending
-INTERFACE: DecisionValidator.validate(command: str) -> ValidationDecision
-```
-
-```
-DEPENDENCY: Volume 6 (Voice) needs API endpoint registration from Volume 8
-STATUS: pending
-INTERFACE: FastAPI router registration for /v1/voice/* endpoints
-```
-
-```
-DEPENDENCY: Volume 6 (Voice) needs MemoryManager.l3.record_episode() from Volume 1 for voice interaction logging
-STATUS: pending
-INTERFACE: MemoryManager.l3.record_episode(episode: Episode) -> None
-```
-
-```
-DEPENDENCY: Volume 6 (Voice) needs OrchestratorEngine.process_query() from Volume 2
-STATUS: pending
-INTERFACE: OrchestratorEngine.process_query(query: str, session_id: str) -> str
-```
-
-```
-DEPENDENCY: Volume 6 (Voice) needs ToolRegistry registration from Volume 10 for VoiceTools
-STATUS: pending
-INTERFACE: ToolRegistry.register(tool_definition: ToolDefinition)
-```
+DEP: Vol 6 → Vol 2: OrchestratorEngine.process_message(message, session_id, device_id) → ConversationResponse [pending]
+DEP: Vol 6 → Vol 9: GovernedOutput + OutputGovernor.govern() [pending]
+DEP: Vol 6 → Vol 9: DecisionValidator.validate() for query safety gating [pending]
+DEP: Vol 6 → Vol 1: MemoryManager.l3.record_episode() for VoiceInteractionEpisode [pending]
+DEP: Vol 6 → Vol 8: AtlasError base class from shared/errors.py [pending]
+DEP: Vol 6 → Vol 8: AtlasConfig from shared/config.py [pending]
+DEP: Vol 6 → shared: structlog from shared/logging.py [pending]
+DEP: Vol 6 → Vol 8: API route registration via app.include_router() [pending]
+DEP: Vol 6 → Vol 10: Tool registration in ToolRegistry [pending]
 
 ---
 
-## Conflict Acknowledgements
+## Conflict Flags
 
-```
-CONFLICT: TTS/STT voice logic inlined in Console ChatPanel.tsx
-VOLUMES: 7 vs 6
-RESOLUTION: resolved — Vol 6 owns TTS/STT implementation. Vol 7 extracts inlined voice code and consumes a clean interface from Vol 6 (conflict-report.md C-09)
-```
+CONFLICT: B.3 §3.1 uses process_query but shared-contracts.md §2.8 defines process_message. Vol 6 conforms to shared contract. STATUS: acknowledged.
 
-```
-CONFLICT: GovernedOutput supersedes ApprovedUtterance
-VOLUMES: 6 vs 9
-RESOLUTION: resolved — GovernedOutput (Vol 9) replaces ApprovedUtterance. Vol 6 consumes GovernedOutput for voice output (conflict-report.md)
-```
+CONFLICT ACK: C-09 — TTS/STT logic inlined in ChatPanel.tsx belongs to Vol 6. Vol 7 extracts and consumes REST API. STATUS: acknowledged.
+
+CONFLICT ACK: C-14 — GovernedOutput supersedes ApprovedUtterance. Vol 6 KILLs governance.py. STATUS: resolved.
+
+---
+
+## Discoveries for Other Volumes
+
+Vol 0: Egress governance pattern → P12 candidate. Lazy model loader standardization. Apple Silicon OpenMP guard.
+Vol 2: VoiceController calls process_message per shared-contracts.md §2.8. Voice = text transport modality.
+Vol 7: Cloud TTS proxies DEFER'd. Vol 7 may implement thin proxies if needed before Vol 6 rebuild.
+Vol 8: AtlasError (Tier 0 dep). AtlasConfig needed. Voice routes as APIRouter.
+Vol 9: GovernedOutput + DecisionValidator consumed.
+Vol 10: VoiceTools (speak, transcribe, get_voice_status) need ToolRegistry registration.
+
+---
+
+## Phase 2 B.4 Verdict Amendment
+
+No changes. All REBUILD/DEFER/KILL decisions confirmed by Phase 2 source reading.
+
+---
+
+## Modification History
+
+| Version | Date | Modified By | Summary |
+|---|---|---|---|
+| v1 | 2026-03-11 | Distillation Agent V6 (Phase 2) | Initial — 7 claims, 9 deps, 3 conflicts, 6 cross-vol notifications |

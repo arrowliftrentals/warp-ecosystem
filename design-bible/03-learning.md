@@ -6,13 +6,13 @@
 | **Name** | Volume 3: Learning & Adaptation |
 | **Purpose** | Design specification for the active learning, correction pipeline, retraining, and knowledge ingestion systems |
 | **Owner** | Design Bible / Volume 3 |
-| **Status** | `draft` |
+| **Status** | `complete` (Phase 2 distillation finished — B.1-B.13 filled, scorecard 40/45) |
 | **Supersedes** | N/A |
 | **Superseded by** | N/A |
-| **Author** | Oz (Part A) / TBD distillation agent (Part B) |
-| **Version** | v5 |
+| **Author** | Oz (Part A) / Oz Phase 1+2 Vol 3 Agent (Part B) |
+| **Version** | v6 |
 | **Created** | 2026-03-10 |
-| **Last Modified** | 2026-03-10 |
+| **Last Modified** | 2026-03-11 |
 
 ---
 
@@ -429,31 +429,359 @@ Coordinates PatternLearner (command patterns, workflow detection), FeedbackProce
 **Triage summary:** 70 files total. REBUILD: 20 files. DEFER: 32 files. KILL: 18 files. The 20 REBUILD files form a coherent minimal learning subsystem capable of passing MVA-4 (correct a classification, verify persistence).
 
 ### B.5 Technology Choices
-*[To be filled by distillation agent]*
+
+**5.1 Language & Runtime**
+- Python 3.11+ (required by PROJECT_CONVENTIONS.md). The learning subsystem is compute-light at MVA — no CUDA/GPU dependency.
+
+**5.2 ML Framework: TrainerProtocol (abstract)**
+Attempt 3 hard-codes spaCy `textcat` for intent classification. The rebuild introduces a `TrainerProtocol` that decouples the training loop from any specific framework:
+```python
+class TrainerProtocol(Protocol):
+    def train(self, data: list[LabeledSample], config: TrainingConfig) -> TrainedModel: ...
+    def evaluate(self, model: TrainedModel, test_data: list[LabeledSample]) -> EvaluationResult: ...
+```
+Initial implementation: a `SpacyTextcatTrainer` adapter wrapping spaCy 3.x `textcat_multilabel`. Swappable for scikit-learn, sentence-transformers, or an LLM-based zero-shot classifier via the same protocol. Rasa NLU YAML is loaded as training data but the Rasa runtime is NOT a dependency — only its YAML format is consumed.
+
+**5.3 Statistical Analysis: Pure Python (no scipy)**
+Attempt 3's `StatisticalAnalyzer` implements Z-test, Welch's t-test, and Bonferroni correction using only `math` — no scipy or numpy dependency. This is correct for MVA and should be preserved. The implementations use:
+- Two-proportion Z-test for accuracy and error-rate comparisons
+- Welch's t-test (unequal variances) for latency comparison
+- Cohen's d for effect size
+- Bonferroni correction for multiple-comparison control (adjusted α = 0.05 / num_tests)
+- Hand-rolled `_standard_normal_cdf` and `_t_cdf` approximations
+
+Post-MVA: if higher precision is needed, add scipy as an optional dependency behind a feature flag.
+
+**5.4 Content Ingestion: Optional Dependencies**
+The content ingester uses optional dependencies for non-text formats:
+- `pypdf` — PDF text extraction (optional; graceful skip if absent)
+- `httpx` + `beautifulsoup4` — URL content fetching and HTML parsing (optional)
+These are extras, not hard requirements: `pip install atlas[knowledge]`.
+
+**5.5 Logging: structlog (not loguru)**
+Attempt 3 uses `loguru` throughout. The rebuild uses `structlog` per shared infrastructure contract (Section 5.3 of shared-contracts.md). All learning modules emit structured JSON logs via `structlog.get_logger()`.
+
+**5.6 Validation: Pydantic v2**
+All data crossing subsystem boundaries is Pydantic-validated (P8). Internal data structures that do not cross boundaries (e.g., in-memory pattern caches) may use dataclasses for performance, but any data entering memory layers or leaving the subsystem API must use Pydantic models.
+
+**5.7 Persistence: Memory Layers (not filesystem)**
+Attempt 3's ActiveLearner writes corrections to `data/training/intent_corrections.jsonl`. The rebuild persists to L5 procedural memory via `MemoryManager.l5`. Model metadata persists to L7 world state. No direct filesystem I/O for learning state — only for model artifact files (spaCy model directories).
+
+**5.8 Concurrency: asyncio + threading.Lock for shared state**
+Attempt 3's ABTestOrchestrator and ModelRegistry use `threading.Lock` for thread-safe access to shared state (active test, model versions). The rebuild preserves this pattern: async interfaces for I/O-bound operations, `threading.Lock` for in-memory state mutation. No multiprocessing — the learning subsystem runs within the main Atlas process.
 
 ### B.6 Data Model
-*[To be filled by distillation agent]*
+
+**6.1 Learning-Domain Schemas (owned by Vol 3)**
+Per conflict resolution C-02, knowledge-pipeline schemas move from `memory/schemas.py` to `atlas/learning/schemas.py`. Vol 3 owns:
+
+**Correction pipeline:**
+- `IntentCorrection(BaseModel)` — query, predicted_intent, correct_intent, confidence, session_id, user_id, timestamp, is_confirmation. Replaces Attempt 3's dataclass with Pydantic.
+- `LabeledSample(BaseModel)` — text, intent, source (LearningSource enum), confidence.
+- `LearningSource(str, Enum)` — USER_CORRECTION, BASE_NLU, SYNTHETIC, ACTIVE_LEARNING.
+
+**Training pipeline:**
+- `TrainingConfig(BaseModel)` — model_name, framework (spacy|sklearn|custom), epochs, train_test_split, min_accuracy_improvement, base_nlu_path.
+- `TrainedModel(BaseModel)` — model_path, version_id, framework, accuracy, training_samples, timestamp.
+- `EvaluationResult(BaseModel)` — accuracy, precision, recall, f1, per_intent_scores, test_size.
+
+**A/B testing:**
+- `ModelVersion(BaseModel)` — version_id, path, created_at, training_metadata.
+- `ABTestConfig(BaseModel)` — test_id, old_model, new_model, traffic_split (0.0-1.0), min_samples (≥100), max_duration_days (≥1), significance_level (default 0.05), min_confidence (default 0.95).
+- `InferenceResult(BaseModel)` — test_id, model_version, query, predicted_intent, confidence, latency_ms, true_intent (optional).
+- `ModelMetrics(BaseModel)` — total_inferences, correct_predictions, labeled_samples, mean/p50/p95/p99 latency, mean_confidence, low_confidence_count, error_count.
+- `ABTestResults(BaseModel)` — test_id, config, old_metrics, new_metrics, statistical_tests, winner (ABTestWinner), confidence, recommendation (ABTestRecommendation), reason.
+- `ABTestStatus(str, Enum)` — RUNNING, COMPLETED, CANCELLED, PROMOTED_NEW, REVERTED_OLD.
+- `ABTestWinner(str, Enum)` — OLD_MODEL, NEW_MODEL, INCONCLUSIVE.
+- `ABTestRecommendation(str, Enum)` — DEPLOY_NEW, KEEP_OLD, RETRAIN_AGAIN, EXTEND_TEST.
+
+**Retraining triggers:**
+- `TriggerType(str, Enum)` — CORRECTION_THRESHOLD, ACCURACY_DEGRADATION, ERROR_RATE_SPIKE, STALENESS, COVERAGE_GAP.
+- `RetrainingTrigger(BaseModel)` — type, severity, details, detected_at, source_layer.
+
+**Knowledge pipeline (moved from Vol 1 per C-02):**
+- `NormalizedContent(BaseModel)` — content_id, raw_text, content_type, source, content_hash (SHA-256), metadata, normalized_at.
+- `ContentType(str, Enum)` — CODE, MARKDOWN, PDF, URL, JSON, TEXT, EVENT.
+- `DomainClassification(BaseModel)` — domain (ScientificDomain), confidence, all_scores, method.
+- `ScientificDomain(str, Enum)` — 36 domains (physics_*, chemistry_*, biology_*, engineering_*, cs_*, math_*, cross_disciplinary). Trim to ~10 for MVA.
+- `ExtractionResult(BaseModel)` — content_id, domain, extractor_tool, entities, relations, facts, confidence.
+- `ExtractedEntity(BaseModel)` — name, entity_type, domain, confidence, attributes.
+- `ExtractedRelation(BaseModel)` — subject, predicate, object, confidence, source.
+- `RefinedKnowledge(BaseModel)` — knowledge_id, domain, entries, graph_edges, contradictions_found, contradictions_resolved.
+- `DomainKnowledgeEntry(BaseModel)` — entry_id, domain, content, entity_type, confidence, source.
+- `ContradictionResult(BaseModel)` — has_contradiction, conflicting_entry_id, conflict_type (ConflictType), confidence, auto_resolvable.
+- `ConflictType(str, Enum)` — DIRECT_NEGATION, NUMERICAL_CONFLICT, SEMANTIC_CONFLICT, TEMPORAL_CONFLICT.
+
+**Behavioral learning:**
+- `CommandPatternData(BaseModel)` — pattern, count, success_rate, last_seen, examples.
+- `LearnedPattern(BaseModel)` — pattern_id, pattern_type, payload, confidence, evidence_count, source.
+- `FeatureRequest(BaseModel)` — description, user_queries, frequency, urgency_score, conversation_ids, confidence, status (FeatureRequestStatus).
+- `ProposalOutcome(BaseModel)` — proposal_id, proposal_type, success, tests_passed, tests_failed, estimated_risk, rejection_reason, affected_components.
+- `EffectivenessReport(BaseModel)` — period, tests_run, models_promoted, models_rolled_back, avg_accuracy_improvement.
+
+**6.2 Schemas consumed from other volumes (read-only)**
+- From Vol 1 (Memory): `Fact`, `FactSource`, `Episode`, `OutcomeSignal`, `OutcomeType`, `Skill` — accessed via MemoryManager.
+- From Vol 9 (Governance): `ValidationDecision` — consumed by learning actions that require governance approval.
+- From Vol 4 (Self-Modification): `ImprovementProposal`, `ProposalStatus` — input to `ProposalLearner.analyze_proposal_outcome()`.
+
+**6.3 Memory layer usage**
+- **L3 Episodic:** Store correction episodes (user corrected intent X → Y).
+- **L4 Declarative:** Store feature requests, knowledge facts, extraction results.
+- **L5 Procedural:** Store learned patterns (command patterns, workflow sequences, fix patterns). Replaces Attempt 3's JSONL file.
+- **L7 World State:** Model registry state (active model version, backup versions), trigger detector state (last retrain time, accuracy snapshots), A/B test state.
+- **L10 Vector:** Semantic similarity for domain classification, knowledge dedup, contradiction detection.
 
 ### B.7 Error Handling
-*[To be filled by distillation agent]*
+
+**7.1 Error hierarchy**
+All learning errors inherit from `AtlasError` (from `atlas.shared.errors`, per shared-contracts Section 5.1).
+
+```
+AtlasError
+├── LearningError (base for all Vol 3 errors)
+│   ├── ExtractionError — domain extractor failure (content_id, extractor_name, domain)
+│   ├── IngestionError — content normalization failure (source, content_type, reason)
+│   ├── SynthesisError — knowledge merge failure (content_ids, merge_stage)
+│   ├── ContradictionError — unresolvable contradiction (entry_id, conflicting_id, conflict_type)
+│   ├── RetrainError — training pipeline failure (model_name, stage, reason)
+│   ├── RegistryError — model version management failure (model_name, version_id, operation)
+│   └── TriggerError — trigger detection failure (trigger_type, layer, reason)
+```
+
+Attempt 3 also defines `RouterError`, `RetrievalError`, `SchedulerError`, `VersioningError`. These collapse into the above — `RouterError` → `ExtractionError` (with extractor_name), `RetrievalError` → removed (Vol 1 owns retrieval errors), `SchedulerError` → `TriggerError`, `VersioningError` → `RegistryError`.
+
+**7.2 Error handling patterns**
+- **Fail-closed for validation errors:** If a Pydantic schema fails validation at a boundary, the operation fails immediately. No partial writes.
+- **Graceful degradation for optional dependencies:** Content ingester catches `ImportError` for pypdf/httpx and returns an `IngestionError` with `reason="optional_dependency_missing"`. The caller decides whether to skip or fail.
+- **Idempotent retries for transient failures:** Model training failures are retried up to 2 times with exponential backoff. A/B test state is persisted to L7 after every batch (100 inference results), so restarts resume from the last checkpoint.
+- **No silent swallowing:** Every `except` block either re-raises, logs at WARNING+ and returns a typed error, or wraps into a `LearningError` subclass. Empty `except: pass` blocks are prohibited per ATLAS Development Protocol.
+
+**7.3 Error context propagation**
+Every error carries structured context (not just a string):
+```python
+raise RetrainError(
+    "Validation accuracy below threshold",
+    model_name="intent_classifier",
+    stage="validation",
+    reason=f"accuracy {score:.3f} < minimum {MIN_ACCURACY}"
+)
+```
+Upstream callers (AutoRetrainingDaemon, LearningManager) log the full context via structlog and propagate to L7 world state for observability.
 
 ### B.8 Testing Strategy
-*[To be filled by distillation agent]*
+
+**8.1 Test tiers (per PROJECT_CONVENTIONS Section 1, test directory structure)**
+
+**Tier 4 — Unit tests** (`tests/unit/learning/`):
+- ActiveLearner: record_correction stores to L5 mock, threshold triggers correctly, mark_training_completed resets counter.
+- ModelTrainer: TrainerProtocol contract enforced, evaluation result validation, train/test split correctness.
+- ModelRegistry: load/unload/promote/rollback lifecycle, thread-safety under concurrent access, L7 state persistence round-trip.
+- TriggerDetector: each of 5 trigger types fires at correct threshold, no false positives below threshold.
+- ABTestOrchestrator: deterministic hash-based routing splits traffic correctly, metrics aggregation correctness, test completion conditions.
+- StatisticalAnalyzer: Z-test/t-test produce known-correct p-values for canned data, Bonferroni correction adjusts significance.
+- OutcomeDetector: keyword-based classification matches expected outcomes, overlap analysis threshold behavior.
+- ContentIngester: each content type (code, markdown, PDF, URL, JSON, text, event) normalizes correctly, SHA-256 dedup cache prevents re-processing.
+- DomainClassifier: keyword matching returns correct domain for known inputs, top-k ranking order.
+- KnowledgeSynthesizer: entity dedup by normalized name, relation dedup by key tuple, contradiction detection integration.
+- ContradictionDetector: negation pattern detection, numerical conflict detection, semantic polarity detection.
+- PatternLearner: command pattern extraction, workflow sequence detection, pattern persistence round-trip.
+- FeedbackProcessor: correction pattern tracking, stats computation.
+- LearningManager: facade delegates correctly to sub-components, suggest_patterns returns sorted results.
+
+Target: ~150-200 unit tests covering all REBUILD components. Each test uses mock MemoryManager — no real database.
+
+**Tier 3 — Integration tests** (`tests/integration/learning/`):
+- Correction → retrain → A/B test → promote full pipeline with real MemoryManager (SQLite in-memory).
+- Knowledge ingestion → classification → extraction → synthesis pipeline with real components.
+- Model registry state survives simulated restart (write to L7, re-read).
+- Trigger detector reads real L3/L5/L7 state.
+
+Target: ~30-50 integration tests.
+
+**Tier 2 — Acceptance tests** (`tests/acceptance/test_learning.py`):
+- MVA-4 scenario: send correction via API → verify persistence in memory → verify model retrain triggered → verify effectiveness measurement recorded.
+- Knowledge ingestion scenario: POST content → verify RefinedKnowledge stored in L4.
+
+Target: 3-5 acceptance tests. Requires live server fixture.
+
+**Tier 1 — Smoke tests** (`tests/smoke/`):
+- Learning subsystem responds to health check. Covered by existing `test_alive.py`.
+
+**8.2 Test data strategy**
+- Intent classification training data: 10 synthetic intents × 20 examples each = 200 labeled samples for unit/integration tests. Stored as fixtures in `tests/fixtures/learning/`.
+- A/B test data: pre-computed inference results with known statistical properties (one clearly better model, one inconclusive, one clearly worse).
+- Knowledge pipeline test data: 5 sample documents (code, markdown, PDF, URL, JSON) with expected extraction results.
+
+**8.3 Critical invariants under test**
+- A model is NEVER promoted without passing the full A/B test pipeline (statistical significance at p < 0.05 after Bonferroni correction).
+- Corrections persisted to L5 survive process restart.
+- Content ingester SHA-256 dedup prevents duplicate processing of identical content.
+- No learning action executes without passing DecisionValidator (Vol 9) governance check.
 
 ### B.9 Configuration
-*[To be filled by distillation agent]*
+
+**9.1 Environment variables** (all prefixed `ATLAS_LEARNING_` to avoid collision)
+
+```
+# Correction pipeline
+ATLAS_LEARNING_RETRAINING_THRESHOLD=50          # corrections before retrain triggers
+ATLAS_LEARNING_MIN_CONFIDENCE_FOR_ASK=0.6       # ask for correction if confidence below this
+ATLAS_LEARNING_MAX_CONFIDENCE_FOR_ASK=0.8       # don't ask if confidence above this
+
+# Model training
+ATLAS_LEARNING_TRAINER_FRAMEWORK=spacy          # spacy | sklearn | custom
+ATLAS_LEARNING_TRAIN_TEST_SPLIT=0.2             # fraction held out for evaluation
+ATLAS_LEARNING_MIN_ACCURACY_IMPROVEMENT=0.01    # minimum accuracy gain to deploy
+ATLAS_LEARNING_MODEL_OUTPUT_DIR=data/models      # model artifact storage
+ATLAS_LEARNING_BASE_NLU_PATH=data/nlu/base.yml  # base training data (Rasa YAML)
+
+# A/B testing
+ATLAS_LEARNING_AB_TRAFFIC_SPLIT=0.5             # fraction to new model
+ATLAS_LEARNING_AB_MIN_SAMPLES=100               # per model before analysis
+ATLAS_LEARNING_AB_MAX_DURATION_DAYS=7           # maximum test window
+ATLAS_LEARNING_AB_SIGNIFICANCE_LEVEL=0.05       # p-value threshold
+ATLAS_LEARNING_AB_AUTO_PROMOTE_CONFIDENCE=0.95  # auto-promote if confidence above this
+
+# Trigger detection
+ATLAS_LEARNING_TRIGGER_ACCURACY_THRESHOLD=0.95  # trigger if accuracy drops below
+ATLAS_LEARNING_TRIGGER_ERROR_RATE_MAX=0.05      # trigger if error rate exceeds
+ATLAS_LEARNING_TRIGGER_STALENESS_DAYS=30        # trigger if model older than
+ATLAS_LEARNING_TRIGGER_CHECK_INTERVAL_HOURS=6   # how often daemon checks triggers
+
+# Knowledge pipeline
+ATLAS_LEARNING_DOMAIN_KEYWORD_WEIGHT=0.7        # keyword vs. semantic weight
+ATLAS_LEARNING_DOMAIN_SEMANTIC_WEIGHT=0.3
+ATLAS_LEARNING_CONTRADICTION_SIMILARITY_THRESHOLD=0.7  # semantic similarity for contradiction
+ATLAS_LEARNING_CONTENT_DEDUP_CACHE_SIZE=10000   # SHA-256 dedup cache entries
+
+# Feature flags (all default OFF per Volume 0 R7)
+ATLAS_LEARNING_ENABLE_AUTO_RETRAIN=false        # enable background retraining daemon
+ATLAS_LEARNING_ENABLE_KNOWLEDGE_PIPELINE=false  # enable content ingestion pipeline
+ATLAS_LEARNING_ENABLE_AB_TESTING=false          # enable A/B testing (requires auto_retrain)
+```
+
+**9.2 Configuration loading**
+All config loaded via `AtlasConfig(BaseSettings)` from `atlas.shared.config` (shared-contracts Section 5.2). Environment variables take precedence over `.env` file. No config files specific to learning — everything goes through the unified config.
+
+**9.3 Feature flag sequencing**
+Feature flags have dependencies: `AB_TESTING` requires `AUTO_RETRAIN`, which requires basic correction recording (always on). The LearningManager checks flags at initialization and logs which capabilities are active:
+```
+LearningManager: corrections=ON, auto_retrain=OFF, ab_testing=OFF, knowledge_pipeline=OFF
+```
 
 ### B.10 Subsystem Lessons Learned
-*[To be filled by distillation agent]*
+
+**10.1 JSONL is the wrong persistence layer**
+Attempt 3's `ActiveLearner` writes corrections to `data/training/intent_corrections.jsonl`. This file grows unbounded, has no indexing, no concurrent-write safety, and is not queryable. Corrections must go through `MemoryManager.l5` (procedural memory) so they get the same durability, query, and backup guarantees as all other persisted data. The JSONL approach was pragmatic for prototyping but is a liability in production.
+
+**10.2 Global singletons are test-hostile**
+Attempt 3's `ModelRegistry` uses a global `_REGISTRY_INSTANCE` singleton (`get_model_registry()`) and `ABTestOrchestrator` uses `get_ab_test_orchestrator()`. These make unit testing painful — tests must patch module-level globals or use importlib reloads. The rebuild uses dependency injection: every component receives its dependencies via constructor arguments. Factory functions exist for convenience but are never used internally.
+
+**10.3 The "never-wired" pattern reveals integration gaps**
+AutoRetrainingDaemon is the textbook example: a complete, well-designed async daemon that was never instantiated at startup. The code is production-quality in isolation, but no integration path existed. Lesson: every component must have a concrete instantiation path from `server.py` (or equivalent entry point) to prove it is reachable. The rebuild's acceptance test for MVA-4 explicitly tests the end-to-end path: correction → trigger → retrain → A/B test → promote.
+
+**10.4 Decouple training framework from training logic**
+Attempt 3's `ModelTrainer` directly calls `spacy.blank("en")`, `nlp.add_pipe("textcat_multilabel")`, and manages spaCy-specific training loops. This makes it impossible to swap the underlying model without rewriting the trainer. The `TrainerProtocol` abstraction (B.5.2) separates "what to train" from "how to train", allowing framework swaps without touching the learning pipeline logic.
+
+**10.5 Statistical rigor prevents promotion of worse models**
+Attempt 3's A/B testing pipeline with Bonferroni-corrected hypothesis tests is one of the best-designed components in the entire codebase. The conservative approach (two-tailed tests, minimum sample sizes, multiple-comparison correction) means a worse model is never accidentally promoted. This design must be preserved exactly as-is in the rebuild. The only change: replace hand-rolled CDF approximations with scipy equivalents if/when scipy becomes a dependency.
+
+**10.6 Knowledge pipeline and learning pipeline are separate concerns**
+Attempt 3 places both in `src/learning/`. They share the module but serve different purposes: the learning pipeline improves Atlas's own classification behavior; the knowledge pipeline ingests external content into structured knowledge. The rebuild keeps them in the same package (`atlas.learning`) but with clear internal boundaries: `learning/correction/` and `learning/knowledge/` sub-packages. The knowledge pipeline's primary consumer is Vol 5 (Intelligence), not the learning pipeline itself.
+
+**10.7 IntentCorrection was a dataclass in a Pydantic codebase**
+Attempt 3's `IntentCorrection` is a plain `dataclass` in `active_learner.py`, while everything else uses Pydantic. This means corrections bypass the validation layer. The rebuild uses `IntentCorrection(BaseModel)` with field validators (e.g., `confidence` must be 0.0-1.0, `correct_intent` must be non-empty). No data enters L5 without Pydantic validation.
+
+**10.8 Domain extractors need graceful degradation**
+The `DomainExtractor` Protocol in `extractors/base.py` includes an `is_available()` method — each extractor checks if its optional dependencies (ChemDataExtractor, SciSpacy, etc.) are installed. This is the correct pattern for a system with many optional scientific dependencies. The rebuild preserves this: extractors that cannot load their dependencies return `is_available() = False` and the `DomainToolRouter` falls back to the general extractor.
 
 ### B.11 Discoveries
-*[To be filled by distillation agent]*
+
+**11.1 EffectivenessCoordinator is redundant**
+`effectiveness_coordinator.py` wraps `EffectivenessTracker` + `ABTestOrchestrator` + `GroundTruthCollector` + `StatisticalAnalyzer` with a thin orchestration layer. It adds one method of value (`deploy_ab_test_for_model`) that can be folded into `EffectivenessTracker`. B.4 correctly KILLs this component.
+
+**11.2 PromptOptimizer (APEX) is a self-contained system**
+`prompt_optimizer.py` implements UCB1 multi-armed bandit strategy selection with rotational mutation across 5 dimensions (context format, reasoning prefix, grep-first exploration, edit precision, error recovery). It has its own Pydantic schemas (`PromptStrategy`, `PromptMetrics`, `PromptStrategyStatus`, `TaskOutcome`, `TurnAnalysis`) defined in `memory/schemas.py`. This is a complete adaptive prompt optimization engine that should be DEFERRED as a unit — it requires mature L5 procedural memory for strategy persistence.
+
+**11.3 PatternLearner tracks 6 distinct pattern types**
+Beyond command patterns and workflows, `PatternLearner` tracks: (1) CODE_PATTERNS from command execution, (2) INTERACTION_PATTERNS from conversation sequences, (3) TEMPORAL_PATTERNS from hourly/daily activity, (4) PREFERENCE_INFERENCE from repeated choices, (5) ERROR_RECOVERY from error→fix sequences, (6) file→action correlations for anticipatory intelligence (Phase 7). The rebuild REBUILD scope includes only (1) and (2); the rest are DEFER.
+
+**11.4 Auto-retrain daemon has real sandbox integration**
+Attempt 3's `AutoRetrainingDaemon` has two execution paths: real sandbox via `SandboxManager.executor` (Docker-based, with `execute_command()` calls for training) and a local fallback via `asyncio.create_subprocess_exec`. The daemon prepares training data from L5/L6, writes to sandbox, executes `python3 -m src.ml.train_intent_classifier`, and copies artifacts back. This is production-quality but tightly coupled to the old project structure. The rebuild preserves the two-path design but abstracts the training command.
+
+**11.5 Feature flags never enabled**
+Attempt 3's research agent flag is set to `FALSE`. The AutoRetrainingDaemon is never instantiated. The knowledge pipeline components are built but have unclear integration status. This is a pattern: features built in isolation, never flag-gated into the runtime. The rebuild makes this explicit with `ATLAS_LEARNING_ENABLE_*` flags (B.9) that have runtime checks at initialization.
+
+**11.6 Shared contract C-02 creates a migration task**
+Per C-02, knowledge-pipeline schemas (NormalizedContent, ExtractionResult, DomainClassification, RefinedKnowledge, etc.) move from `memory/schemas.py` to `learning/schemas.py`. Vol 1 will provide thin re-exports for backward compatibility during migration. Vol 3 is the owner of these schemas going forward.
+
+**11.7 Cross-layer linker and hybrid retriever are not Vol 3**
+Per C-04 and C-05, `cross_layer_linker.py` (memory layer cross-referencing) and `hybrid_retriever.py` (FTS5 + FAISS + graph retrieval) are assigned to Vol 1 (Memory). Vol 3's B.4 correctly flagged these as ownership conflicts and DEFERed them. The gate confirmed: these are memory infrastructure.
+
+**11.8 memory_guard.py is governance, not learning**
+Per C-06, `memory_guard.py` (memory validation) is assigned to Vol 9 (Governance). Vol 3 correctly KILLed it from its scope.
 
 ### B.12 Oversight Self-Review
-*[To be filled by distillation agent — MANDATORY before submission]*
+
+**A.4 Item 1: "60+ files is scope explosion"**
+Addressed in B.4 (Scope Triage): 70 files triaged to 20 REBUILD, 32 DEFER, 18 KILL. The 20 REBUILD files form a minimal coherent subsystem. The 32 DEFER files are sequenced by dependency (e.g., `prompt_optimizer.py` requires mature L5, so it DEFERs until after memory is stable). The 18 KILL files are genuinely redundant or misplaced (e.g., `code_explainer.py` belongs in Vol 10 Tools, `memory_guard.py` belongs in Vol 9 Governance, `intelligence_learning_engine.py` duplicates `knowledge_engine.py`). The rebuild scope is aggressive but defensible: 20 files can deliver MVA-4 (correct a classification, verify persistence, prove learning improves accuracy).
+
+**A.4 Item 2: "AutoRetrainingDaemon never started"**
+Addressed in B.4 (REBUILD verdict) and B.10.3 (lesson learned). The daemon is well-designed but was never instantiated — the classic A1 "feature factory without integration" pattern. The rebuild preserves the design (periodic trigger checking → retrain → validate → A/B test → promote) but implements it as a lightweight async task started from `server.py` at boot, gated behind `ATLAS_LEARNING_ENABLE_AUTO_RETRAIN` (B.9). The acceptance test (B.8 Tier 2) explicitly tests the end-to-end correction → retrain → A/B test → promote path to prove integration.
+
+**A.4 Item 3: "Knowledge pipeline vs. learning pipeline"**
+Addressed in B.2 (architecture: two separate pipelines), B.4 (separate triage groups), and B.10.6 (lesson learned). The conclusion: they remain in the same volume because the knowledge pipeline produces `RefinedKnowledge` that feeds into the learning feedback loop (knowledge gaps inform what to learn next). However, internally they are separate sub-packages (`learning/correction/` and `learning/knowledge/`) with no circular dependencies. The knowledge pipeline's primary external consumer is Vol 5 (Intelligence), documented in B.3.10 and shared-contracts Section 2.6.
+
+**A.4 Item 4: "Engineering-specific extractors"**
+Addressed in B.4: AutoCAD (`extractors/autocad.py`), MATLAB (`extractors/matlab.py`), and FEA suite (`extractors/fea_suite.py`) are all DEFER. They are high-value for the user (mechanical engineer PhD) but not required for MVA-4. The general extractor (`extractors/general.py`) and base protocol (`extractors/base.py`) are REBUILD, ensuring the extractor architecture exists for these domain-specific extractors to plug into post-MVA. The engineering extractor (`extractors/engineering.py`) is explicitly noted as "prioritize after general extractor works" in B.4.
+
+**Completeness check:**
+- All 4 A.4 items addressed: ✓
+- B.4 assigns REBUILD/DEFER/KILL to all 70 files in A.2: ✓ (20 + 32 + 18 = 70)
+- B.3 interface contracts cover all REBUILD components: ✓
+- B.5-B.10 use concrete evidence from source code (not hypothetical): ✓
+- Shared contracts C-02, C-04, C-05, C-06 acknowledged and resolved: ✓
+- No claims contradict shared-contracts.md: ✓
 
 ### B.13 Design Quality Scorecard
-*[To be filled by distillation agent — MANDATORY. Minimum passing score: 30/45]*
+
+**Criterion 1: Completeness (max 5)**
+All 70 files in A.2 triaged. B.1-B.12 filled. Every REBUILD component has interface contracts, data model entries, error handling, test strategy, and configuration. All 4 A.4 items addressed in B.12.
+**Score: 5/5**
+
+**Criterion 2: Architectural Clarity (max 5)**
+Two-pipeline architecture (correction-driven learning + knowledge ingestion) with LearningManager facade is clearly documented in B.2. Data flow diagrams show complete paths from input to persistence. Component responsibilities are non-overlapping. No ambiguity in ownership after conflict resolutions.
+**Score: 4/5** (minor: knowledge pipeline sub-package split is described but not fully detailed in B.2)
+
+**Criterion 3: Interface Precision (max 5)**
+B.3 provides 12 interface contracts with exact constructor signatures, method signatures, input/output types, dependency lists, and consumer lists. Cross-volume interfaces explicitly reference shared-contracts Sections 1.4, 2.5, 2.11, 3. All types are Pydantic models with field descriptions.
+**Score: 5/5**
+
+**Criterion 4: Scope Discipline (max 5)**
+Aggressive triage: 20 REBUILD out of 70 files (28%). DEFER/KILL rationale is provided for every file. Ownership conflicts (C-04, C-05, C-06) resolved by deferring or killing from Vol 3 scope. No scope creep — deferred items have explicit "build after X" sequencing.
+**Score: 5/5**
+
+**Criterion 5: Evidence-Based Claims (max 5)**
+All technology choices reference specific Attempt 3 source code (e.g., StatisticalAnalyzer uses math-only Z-test at statistical_analysis.py:68-128). Lessons learned cite specific files and patterns. No hypothetical claims.
+**Score: 4/5** (minor: some peripheral files were read at signature-level, not full implementation)
+
+**Criterion 6: Testing Rigor (max 5)**
+Four test tiers defined per PROJECT_CONVENTIONS. Critical invariants enumerated (B.8.3). Test data strategy defined (B.8.2). Acceptance test explicitly validates MVA-4 end-to-end. Unit test target covers all REBUILD components.
+**Score: 4/5** (minor: specific test count is estimated range, not exact)
+
+**Criterion 7: Shared Contract Compliance (max 5)**
+All relevant shared contracts referenced: Section 1.4 (learning schemas), Section 2.5 (Vol 2→Vol 3 interface), Section 2.11 (Vol 3→Vol 1 memory access), Section 3 (memory layer usage), Section 5 (shared infrastructure). Conflict resolutions C-02, C-04, C-05, C-06 explicitly acknowledged.
+**Score: 5/5**
+
+**Criterion 8: Configuration & Operability (max 5)**
+All config via environment variables with `ATLAS_LEARNING_` prefix. Feature flags with dependency sequencing. Config loaded through shared AtlasConfig. No magic constants — all thresholds configurable.
+**Score: 4/5** (minor: no config validation beyond Pydantic BaseSettings defaults mentioned)
+
+**Criterion 9: Failure Mode Coverage (max 5)**
+Error hierarchy defined (B.7). Seven error types with structured context. Fail-closed, graceful degradation, idempotent retry, and no-silent-swallow patterns documented. Optional dependency handling specified.
+**Score: 4/5** (minor: no explicit circuit-breaker or rate-limiting for retraining failures)
+
+**Total: 40/45** (passing threshold: 30/45) ✓
 
 ---
 
@@ -466,3 +794,4 @@ Coordinates PatternLearner (command patterns, workflow detection), FeedbackProce
 | v3 | 2026-03-10 | Oz | Added Doc ID field (`DB-V03-001`) per PROJECT_CONVENTIONS.md Section 9.4 | Added unique document number for machine searching |
 | v4 | 2026-03-10 | Oz | Added CORE/PERIPHERAL classification to A.2 source manifest per DISTILLATION_PROTOCOL.md Section 5 | Tagged files as essential vs. nice-to-have for the rebuild analysis |
 | v5 | 2026-03-10 | Oz Phase 1 Vol 3 Agent | Phase 1 distillation complete — filled B.1 (purpose), B.2 (architecture with two pipelines + facade), B.3 (12 interface contracts with full signatures), B.4 (scope triage: 20 REBUILD, 32 DEFER, 18 KILL) | The analysis agent read all 70 source files and wrote the technical specification for what to rebuild and what to drop |
+| v6 | 2026-03-11 | Oz Phase 2 Vol 3 Agent | Phase 2 distillation complete — filled B.5 (technology: TrainerProtocol, pure-Python stats, structlog, Pydantic v2, memory-layer persistence), B.6 (40+ Pydantic schemas in 6 groups, C-02 migration, memory layer usage), B.7 (7 error types, 4 handling patterns), B.8 (4 test tiers, ~180-255 tests, MVA-4 acceptance, 4 critical invariants), B.9 (22 env vars, 3 feature flags), B.10 (8 lessons), B.11 (8 discoveries), B.12 (all 4 A.4 items addressed), B.13 (scorecard: 40/45). Created agent-comm/vol-03.md. | The deep-dive agent completed the full technical specification scoring 40/45 on quality |

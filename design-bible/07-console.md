@@ -6,13 +6,13 @@
 | **Name** | Volume 7: Console (Frontend) |
 | **Purpose** | Design specification for the visual interface — chat, telemetry, 3D visualization, file exploration, and system monitoring |
 | **Owner** | Design Bible / Volume 7 |
-| **Status** | `draft` |
+| **Status** | `Phase 2 distilled` (B.1–B.13 complete) |
 | **Supersedes** | N/A |
 | **Superseded by** | N/A |
 | **Author** | Oz (Part A) / Vol-07 Distillation Agent (Part B) |
-| **Version** | v5 |
+| **Version** | v6 |
 | **Created** | 2026-03-10 |
-| **Last Modified** | 2026-03-10 |
+| **Last Modified** | 2026-03-11 |
 
 ---
 
@@ -624,55 +624,338 @@ Every component from A.2 receives a REBUILD / DEFER / KILL verdict.
 - **react-grid-layout** — Draggable dashboard grid. DEFER until dashboard customization returns.
 
 ### B.5 Technology Choices
-*[To be filled by distillation agent]*
+
+**Current Stack (from `vite.config.ts` and `package.json`):**
+- Vite 6.2.0 with `@vitejs/plugin-react`
+- React 19.0.0 + React Router DOM 7.2.0
+- TypeScript 5.7.3
+- Tailwind CSS 4.0.14 (v4 beta) via `@tailwindcss/vite`
+- Node.js Express backend proxy (`server/index.ts`)
+
+**Dependencies to KEEP (12 production packages):**
+- `react`, `react-dom` (19.0.0) — Core framework
+- `react-router-dom` (7.2.0) — Client-side routing
+- `tailwindcss` (4.0.14) — Utility CSS
+- `lucide-react` (0.475.0) — Icon library (tree-shakeable)
+- `react-markdown` + `remark-gfm` + `rehype-raw` — Markdown rendering (core to chat display)
+- `highlight.js` (11.11.1) — Code syntax highlighting in chat
+- `clsx` — Conditional class merging
+- `date-fns` — Date formatting (if present; else use `Intl.DateTimeFormat`)
+
+**Dependencies to KILL (15+ packages):**
+- `next` (16.0.0) — Dead weight; Attempt 3 fully migrated to Vite. Vestigial `package.json` entry.
+- `@anthropic-ai/sdk` (0.39.0) — Direct LLM calls from frontend is a security anti-pattern. All LLM interaction routes through Atlas backend.
+- `openai` (4.85.4) — Same as above.
+- `cytoscape` + `cytoscape-cola` + `cytoscape-dagre` + `cytoscape-elk` + `cytoscape-fcose` (5 packages) — Graph viz libraries tied to KILL’d ArchitectureView.
+- `reactflow` + `@reactflow/core` + `@reactflow/node-resizer` (3 packages) — Alternative graph viz, also KILL’d.
+- `prismjs` + `@types/prismjs` — Redundant with `highlight.js`. Pick one; highlight.js is already integrated in `EnhancedCodeBlock.tsx`.
+- `framer-motion` (12.4.7) — ~32KB gzipped for animations achievable with CSS transitions/`@keyframes`.
+- `zustand` (5.0.3) — State management library imported nowhere in production code. `ConsoleProvider` uses React Context.
+
+**Dependencies to DEFER (loaded only via dynamic `import()`):**
+- `three` + `@react-three/fiber` + `@react-three/drei` + `@react-three/postprocessing` + `@types/three` (5 packages) — 3D viz stack. Phase 1 bundle must not contain these.
+- `react-grid-layout` — Draggable dashboard. DEFER’d feature.
+
+**Dependencies to ADD:**
+- `zod` — Client-side validation for API responses. Currently zero runtime validation (see B.11 D1). Schemas mirror backend Pydantic models.
+- `@tanstack/react-query` (or equivalent) — Replace manual `fetch` + `useState` + `useEffect` polling patterns with proper cache/retry/dedup/stale-while-revalidate.
+
+**Build Configuration Gaps:**
+- No code splitting configured — single bundle includes all routes and components.
+- No bundle analysis plugin (`rollup-plugin-visualizer` recommended).
+- No production build optimization beyond Vite defaults (no manual chunk strategy).
+- Source maps enabled in production (should be disabled or uploaded to error tracking service only).
+
+**Decision:** The core stack (React 19 + Vite + Tailwind) is correct for the domain (internal developer tool). The bloat is from unused dependencies (15+ packages to remove, ~200KB+ savings) and missing foundational tools (Zod, query library). Phase 1 rebuild targets ~12 production dependencies.
 
 ### B.6 Data Model
-*[To be filled by distillation agent]*
+
+**Core TypeScript Interfaces (from `types.ts`, `ChatPanel.tsx`, `ConsoleProvider.tsx`):**
+
+1. **ChatMessage** — `{ id: string; role: 'user' | 'assistant' | 'system'; content: string; timestamp: Date; thinking?: ThinkingStep[]; toolCalls?: ToolCall[]; isStreaming?: boolean }`
+2. **ThinkingStep** — `{ id: string; title: string; content: string; status: 'thinking' | 'complete' | 'error'; duration?: number }`
+3. **ToolCall** — `{ id: string; name: string; arguments: Record<string, unknown>; result?: string; status: 'pending' | 'running' | 'complete' | 'error' }`
+4. **EngagementStep** — `{ step: number; action: string; detail: string; status: string; timestamp: string }` (streamed via SSE `engagement_step` events)
+5. **ImplementationEvent** — `{ event_type: string; data: Record<string, unknown> }` (streamed via SSE `implementation_event` events)
+6. **TaskInfo** — `{ id: string; title: string; description: string; status: 'pending' | 'in_progress' | 'completed' | 'failed'; priority: string; created_at: string }`
+
+**State Shape (`ConsoleProvider.tsx` context value):**
+
+```
+ConsoleState {
+  messages: ChatMessage[]          // Chat history (max 100, see persistence)
+  isStreaming: boolean              // SSE stream currently active
+  currentThinking: ThinkingStep[]  // Active thinking steps for current response
+  sessionId: string                // Current session ID (crypto.randomUUID)
+  activeTab: string                // Current tab identifier in MainTabs
+  sidebarCollapsed: boolean        // Sidebar expand/collapse state
+}
+```
+
+**Persistence Model (localStorage):**
+
+| Key | Type | Description |
+|-----|------|-------------|
+| `atlas-console-messages` | `ChatMessage[]` (serialized JSON) | Chat history, capped at 100 messages |
+| `atlas-console-session` | `string` | Current session UUID |
+| `atlas-console-theme` | `'dark' \| 'light' \| 'system'` | Theme preference |
+| `atlas-sidebar-collapsed` | `boolean` | Sidebar state |
+| `atlas-active-tab` | `string` | Last active tab identifier |
+| `atlas-telemetry-prefs` | `object` | Telemetry display preferences |
+
+**Write Discipline:**
+- Messages appended during SSE streaming; flushed to localStorage on stream completion.
+- Throttle-flush interval: 150ms during active streaming (prevents localStorage thrashing).
+- Maximum 100 messages retained; oldest truncated on overflow (FIFO).
+- No IndexedDB, no sessionStorage, no cookie persistence.
+
+**HealthState Shape (`HealthContext.tsx`):**
+
+```
+HealthState {
+  status: 'healthy' | 'degraded' | 'unhealthy' | 'unknown'
+  endpoints: {
+    chat: boolean
+    health: boolean
+    telemetry: boolean
+    memory: boolean
+    goals: boolean
+    tasks: boolean
+    learning: boolean
+    sandbox: boolean
+    security: boolean
+    skills: boolean
+  }
+  lastCheck: Date
+  latency: number              // ms, last health check round-trip
+  consecutiveFailures: number  // Tracks degraded → unhealthy transition
+}
+```
+
+**Data Flow (happy path):**
+1. User types in `PromptInput` → `ChatPanel` dispatches to `ConsoleProvider`
+2. `ConsoleProvider` calls `atlasClient.chatStream()` → SSE connection opens to `/v1/atlas/chat`
+3. SSE events update `messages`, `currentThinking`, and `toolCalls` in context state
+4. On stream end (`[DONE]` event), state flushes to localStorage
+5. System views (Memory, Goals, Tasks, etc.) poll their respective endpoints independently via `useEffect` hooks — no shared data cache exists (see B.11 D3)
 
 ### B.7 Error Handling
-*[To be filled by distillation agent]*
+
+**Current Error Boundary Architecture:**
+
+1. **App-level boundary** — `App.tsx` wraps the entire router in a single `ErrorBoundary` with a full-page fallback ("Something went wrong. Try refreshing."). Catches React render errors only.
+2. **Component-level boundary** — `NeuralArchitecture3DHost.tsx` wraps the Three.js canvas in a dedicated boundary. WebGL crashes are contained; the rest of the app continues.
+3. **No other boundaries exist.** A crash in any system view tab (Memory, Goals, etc.) takes down the entire app.
+
+**Network Error Handling (per-client):**
+
+| Client | Strategy | Weakness |
+|--------|----------|----------|
+| `atlasClient.ts` | try/catch around fetch, returns `{ error }` objects | No retry, no timeout (relies on `api.ts`) |
+| `atlasConsoleClient.ts` | try/catch, logs to `debugLogger` | Duplicate of atlasClient pattern |
+| `atlasLearningClient.ts` | try/catch, returns `null` on failure | Silent failure — caller cannot distinguish "no data" from "error" |
+| `atlasProjectFs.ts` | try/catch, throws on non-200 | Inconsistent — throws while others return error objects |
+| `api.ts` | Base fetch wrapper with 10s timeout | Good timeout; no retry, no circuit breaker |
+
+**SSE Stream Error Handling (`ChatPanel.tsx`):**
+- `EventSource.onerror` reconnects once with 2s flat delay
+- No exponential backoff, no max retry limit
+- Stream errors surface as generic "Connection lost" message in chat
+- **Fix (B.12 #9):** Exponential backoff 2s → 4s → 8s → 16s → 30s cap, max 10 attempts
+
+**WebSocket Error Handling (`TelemetryContext.tsx`):**
+- Reconnect on close with 3s delay
+- Ping/pong heartbeat every 30s; 5s pong timeout (per B.3.2)
+- Max 5 reconnection attempts before giving up
+- Missing: no user notification when telemetry connection is permanently lost
+
+**4 Critical Gaps:**
+
+1. **No toast/notification system.** Errors are logged to `console.error` or silently swallowed. User sees nothing unless the entire app crashes into the ErrorBoundary. **Fix (B.12 #8):** Add minimal toast component.
+2. **No error telemetry.** Frontend errors are not reported to any backend endpoint. `window.onerror` and `unhandledrejection` are not captured. Production debugging requires user-reported browser console screenshots.
+3. **No Zod/schema validation on API responses.** Every `fetch` response is cast via `as T` with zero runtime validation. Malformed backend responses cause silent data corruption, not visible errors. **Fix (B.12 #7):** Zod at API client boundary.
+4. **Empty catch blocks.** At least 6 instances across API clients where `catch (e) { console.error(e) }` is the entire error handling — no state cleanup, no user notification, no retry.
+
+**P5 Alignment (A.4 #5 — 3D visualization complexity):** The `NeuralArchitecture3DHost` error boundary is the single well-designed error containment pattern in the codebase. All other error handling is log-and-pray.
 
 ### B.8 Testing Strategy
-*[To be filled by distillation agent]*
+
+**Current State:** Zero frontend tests exist (A.4 #2). No test runner configured. `package.json` has no `test` script.
+
+**Recommended Stack:**
+- **Runner:** Vitest (native Vite integration, ESM-first, fast HMR-aware watch mode)
+- **Component testing:** `@testing-library/react` (user-centric assertions, no shallow rendering)
+- **API mocking:** `msw` (Mock Service Worker — intercepts at network level, works with SSE streams)
+- **E2E (Phase 2):** Playwright (optional, for critical-path smoke tests after component tests are solid)
+
+**Acceptance Tests (CT-01 through CT-08):**
+
+| ID | Test | Validates |
+|----|------|-----------|
+| CT-01 | Send chat message → receive streamed response → renders in MessageList | Core chat flow, SSE parsing, rendering pipeline |
+| CT-02 | Thinking steps render progressively during streaming | `ThinkingProcess` component, streaming state updates |
+| CT-03 | Tool calls display with status progression (pending → running → complete) | ToolCall rendering, status lifecycle |
+| CT-04 | Backend unavailable → "disconnected" banner shown, no crash, cached messages remain | Resilience imperative (B.1), error boundary |
+| CT-05 | Click tab → correct system view renders with data | `MainTabs` routing, view mount/unmount |
+| CT-06 | `MemoryView` fetches and displays memory layers from `/v1/memory/layers` | System view data flow, API client |
+| CT-07 | Theme toggle persists across page reload | `ThemeContext` + localStorage round-trip |
+| CT-08 | 101st message triggers truncation of oldest message in localStorage | Persistence boundary condition, FIFO cap |
+
+**Regression Tests (mapping A.4 items):**
+
+| A.4 Item | Regression Test | Type |
+|----------|----------------|------|
+| #1 Scope explosion | Build-time assertion: component file count in `src/components/` ≤ 30 | CI script |
+| #2 Zero tests | CI gate: `vitest run --coverage` must report ≥80% line coverage on REBUILD files | CI gate |
+| #3 Tech stack bloat | Production bundle size assertion: `dist/` ≤ 500KB gzipped | Build script |
+| #4 API contract drift | MSW fixtures auto-generated from backend OpenAPI spec; schema desync = test failure | Integration test |
+| #5 3D complexity | Assert `three` not in main chunk: `vitest` snapshot of Rollup output metadata | Build verification |
 
 ### B.9 Configuration
-*[To be filled by distillation agent]*
+
+**Build-Time Configuration (`vite.config.ts`):**
+
+| Config | Current Value | Source |
+|--------|--------------|--------|
+| Dev server port | 5173 | `vite.config.ts` → `server.port` |
+| API proxy target | `http://localhost:8000` | `vite.config.ts` → `server.proxy` |
+| Path alias `@` | `./src` | `vite.config.ts` → `resolve.alias` |
+| TypeScript target | ES2022 | `tsconfig.json` |
+| Tailwind integration | `@tailwindcss/vite` plugin | `vite.config.ts` → `plugins` |
+
+**Runtime Configuration (currently hardcoded in source):**
+
+| Config | Value | Location | Problem |
+|--------|-------|----------|---------|
+| API base URL | `''` (relative) | `atlasClient.ts` | Correct for proxied dev; breaks in standalone deploy |
+| SSE endpoint path | `/v1/atlas/chat` | `atlasClient.ts` | Hardcoded |
+| WS endpoint | `ws://localhost:8000/ws/telemetry` | `TelemetryContext.tsx` | Hardcoded host — breaks in any non-localhost deploy |
+| Health poll interval | 30000ms | `HealthContext.tsx` | Hardcoded |
+| Message cap | 100 | `ConsoleProvider.tsx` | Hardcoded |
+| Flush throttle | 150ms | `ConsoleProvider.tsx` | Hardcoded |
+| SSE reconnect delay | 2000ms | `ChatPanel.tsx` | Hardcoded, no backoff |
+| WS reconnect delay | 3000ms | `TelemetryContext.tsx` | Hardcoded |
+| WS max retries | 5 | `TelemetryContext.tsx` | Hardcoded |
+| WS ping interval | 30000ms | `TelemetryContext.tsx` | Hardcoded |
+| Fetch timeout | 10000ms | `api.ts` | Hardcoded |
+| Storage key prefix | `atlas-` | Multiple files | Convention only, not configurable |
+
+**Phase 1 Deliverable — `src/config.ts` (B.12 #10):**
+
+All 12 runtime values above must be sourced from a central `src/config.ts` module that reads from `import.meta.env` with sensible defaults:
+
+```
+// src/config.ts
+export const config = {
+  apiBaseUrl: import.meta.env.VITE_API_BASE_URL ?? '',
+  wsUrl: import.meta.env.VITE_WS_URL ?? 'ws://localhost:8000/ws/telemetry',
+  healthPollInterval: Number(import.meta.env.VITE_HEALTH_INTERVAL ?? 30000),
+  messageCap: Number(import.meta.env.VITE_MESSAGE_CAP ?? 100),
+  flushThrottle: 150,
+  sseReconnect: { base: 2000, max: 30000, maxAttempts: 10 },
+  wsReconnect: { delay: 3000, maxRetries: 5, pingInterval: 30000 },
+  fetchTimeout: 10000,
+  storagePrefix: 'atlas-',
+  features: {
+    enable3D: import.meta.env.VITE_FEATURE_3D === 'true',
+    enableVoice: import.meta.env.VITE_FEATURE_VOICE === 'true',
+  },
+} as const;
+```
 
 ### B.10 Subsystem Lessons Learned
-*[To be filled by distillation agent]*
+
+**L1: ChatPanel is a god component.** `ChatPanel.tsx` (550+ lines) handles message rendering, SSE streaming, scroll management, input orchestration, thinking process display, and error handling. Decompose into: `MessageList` (rendering), `useStreamManager` (hook for SSE lifecycle), `ScrollAnchor` (auto-scroll with user-override detection), and `ChatContainer` (composition root).
+
+**L2: Duplicate API clients are a maintenance trap.** `atlasClient.ts` and `atlasConsoleClient.ts` both implement `chatStream()` with slightly different SSE parsing logic. When one receives a bug fix, the other silently drifts. **Action:** Merge into single client; delete `atlasConsoleClient.ts` after extracting unique endpoints.
+
+**L3: Three visualization libraries for one feature.** The codebase imports Cytoscape (5 plugins), Reactflow (3 packages), and Three.js (5 packages) — 13 packages total — for architecture visualization that was never fully integrated. This is the library-accumulation anti-pattern: each attempt tried a new library without removing the previous one.
+
+**L4: 14 system view tabs is excessive.** `MainTabs` renders 14 tabs (Memory, Goals, Tasks, Learning, Skills, Meta, Diagnostics, Security, Sandbox, Simulation, Drift Review, Recommendations, Systems, Logs). Most fetch a single endpoint and display a list. Consolidate into 4–5 logical groups (System Health, Intelligence, Operations, Development) with sub-navigation.
+
+**L5: StatusBar renders nothing useful.** `StatusBar.tsx` is ~25 lines that render an empty footer bar with a copyright notice. Either populate it with health status indicator, session ID, connection state, and latency — or remove it entirely. Empty chrome wastes vertical space.
+
+**L6: Theme system is well-designed.** `ThemeContext.tsx` uses CSS custom properties with `prefers-color-scheme` media query fallback. Persistence is clean (localStorage → context → CSS vars applied to `<html>` element). This is the reference pattern for other contexts.
+
+**L7: HealthContext is the most robust context.** Implements polling with configurable interval, tracks consecutive failures for status transitions, provides fully typed health state, handles component unmount cleanup (clears interval). Good reference implementation.
+
+**L8: SpeakerGate belongs in Volume 6.** `stt/speakerGate.ts` implements voice activity detection with Web Audio API (RMS computation, noise gate, configurable thresholds). This is voice infrastructure, not console infrastructure. Move to Voice subsystem (Volume 6) during monorepo consolidation.
+
+**L9: File operations through chat is architecturally sound but fragile.** `atlasProjectFs.ts` sends file read/write/list operations to Atlas backend via REST, displaying results in chat. The pattern is correct (backend-mediated file access, no direct filesystem from browser). Missing: optimistic updates, conflict detection, file-size limits, progress indicators for large files.
+
+**L10: Layout system is over-engineered for current use.** `layoutConfig.ts` defines an elaborate `DraggableDashboard` config with grid positions, resize handles, min/max dimensions, and responsive breakpoints. The actual UI uses a simple tab-based layout (`MainTabs`). The draggable system is dead code adding ~400 lines of complexity with zero user-facing value.
 
 ### B.11 Discoveries
-*[To be filled by distillation agent]*
+
+**D1: No client-side validation exists.** Every API response is consumed via TypeScript `as T` casts with zero runtime validation. If the backend returns an unexpected data shape (missing field, wrong type, null where object expected), the console silently renders garbage or crashes in an unrelated component downstream. This is the single highest-priority fix for Phase 1. **Recommendation:** Add Zod schemas mirroring every backend response type; validate at the API client boundary before data enters React state.
+
+**D2: Dead CSS custom properties.** `ThemeContext.tsx` sets 12 CSS custom properties (`--bg-primary`, `--text-primary`, `--border-color`, etc.) on the `<html>` element. However, multiple components use hardcoded Tailwind classes (`bg-gray-900`, `text-white`, `border-gray-700`) instead of the theme variables. The theme system works but is partially bypassed. **Recommendation:** Audit all color usage; replace hardcoded colors with theme-aware classes (extend Tailwind config with `colors: { primary: 'var(--bg-primary)' }` or use `bg-[var(--bg-primary)]` syntax).
+
+**D3: Polling thundering-herd risk.** `HealthContext` polls `/health` every 30s. Each system view tab (Memory, Goals, Tasks, Learning, Skills, Meta, Diagnostics, Security, Sandbox, Simulation, Drift Review, Recommendations, Systems, Logs) polls its own endpoint on mount with an independent `useEffect` timer. If `DashboardView` mounts all 14 tabs simultaneously, this creates 15 concurrent polling loops hitting the backend. **Recommendation:** Centralize polling via `@tanstack/react-query` with shared cache, dedup, and stale-while-revalidate. Or: single `/v1/dashboard` endpoint that returns aggregated data.
+
+**D4: NeuralArchitecture3D is a 20-file sub-architecture.** The 3D visualization code (`NeuralArchitecture3DHost`, `NeuralArchitecture3DScene`, `NeuralNetworkScene`, `NeuralHUD`, `NeuralGraph`, `NeuralNode`, `NeuralEdge`, `NeuralOrganismView`, `BrainCanvas`, `MiniBrainPreview`, `Architecture3DView`, `ThreeSceneContext`, plus associated types and shaders) forms a self-contained sub-application with its own React context, state management, animation loop, and WebGL render pipeline. This reinforces the DEFER verdict — rebuilding this is not "add a component"; it is a standalone project requiring dedicated design and performance budgeting.
+
+**D5: GoalsView contains a reusable filtering pattern.** `GoalsView.tsx` implements a filtering system for goal artifacts (code, document, concept) with text search, status facet filters, and sort controls. This exact UI pattern — filterable list with search bar, faceted filters, and column sorting — is repeated across `MemoryView`, `TasksView`, and `LearningView` with slight variations. **Recommendation:** Extract a generic `FilterableListView<T>` component that all system views compose with type-specific renderers.
+
+**D6: `crypto.randomUUID()` has no fallback.** `session.ts` calls `crypto.randomUUID()` to generate session IDs. This API is available in secure contexts (HTTPS or localhost) only. In a non-secure HTTP context (e.g., accessing dev server via LAN IP), it throws. **Recommendation:** Add fallback: `crypto.randomUUID?.() ?? crypto.getRandomValues(new Uint8Array(16)).reduce((s, b) => s + b.toString(16).padStart(2, '0'), '')`.
+
+**D7: Engagement and implementation event streams are undocumented.** The SSE parser in `ChatPanel.tsx` handles `engagement_step` and `implementation_event` event types, which map to structured objects (`EngagementStep`, `ImplementationEvent`) displayed in `AgentResponsePanel.tsx`. These event types are not documented in any backend API spec or Volume 2 shared contracts. **Recommendation:** Document these SSE event types in Volume 2 (API Gateway) shared contracts so backend and frontend stay synchronized.
 
 ### B.12 Oversight Self-Review
 
 **Review question: "What oversights have been missed in this plan?"**
 
-**Identified oversights and resolutions:**
+**Phase 1 oversights (identified during B.1–B.4 distillation):**
 
 1. **Error response contracts were underspecified.** The initial B.3 draft listed endpoints but not error formats. **Resolved:** Added explicit error response format (`{ error, code, details }`) and HTTP status code handling requirements (400, 404, 429, 500, 502/503) to B.3.1.
 
-2. **Accessibility (a11y) was not addressed.** The initial B.1 design imperatives omitted accessibility. For a developer tool this is easy to deprioritize, but keyboard navigation and screen reader support are baseline requirements. **Resolved:** Added accessibility imperative to B.1 (WCAG 2.1 AA, ARIA labels, keyboard navigation).
+2. **Accessibility (a11y) was not addressed.** The initial B.1 design imperatives omitted accessibility. Keyboard navigation and screen reader support are baseline requirements even for developer tools. **Resolved:** Added accessibility imperative to B.1 (WCAG 2.1 AA, ARIA labels, keyboard navigation).
 
-3. **State persistence strategy was implicit.** The source code uses localStorage in several places but the spec did not define what persists across page reloads. **Resolved:** Added B.3.6 (State Persistence) with explicit key names and persistence rules.
+3. **State persistence strategy was implicit.** The source code uses localStorage in several places but the spec did not define what persists across page reloads. **Resolved:** Added B.3.6 (State Persistence) with explicit key names, types, and persistence rules.
 
-4. **Resilience / degraded mode behavior was unspecified.** The console must handle backend-unavailable gracefully. **Resolved:** Added "Resilient" design imperative to B.1 (render with "backend disconnected" state, do not crash).
+4. **Resilience / degraded mode behavior was unspecified.** The console must handle backend-unavailable gracefully. **Resolved:** Added "Resilient" design imperative to B.1 (render with "backend disconnected" state, do not crash, preserve cached messages).
 
 5. **Bundle size budget not set.** With KILL/DEFER of Three.js and other heavy libraries, the Phase 1 bundle should target <500KB gzipped. **Resolved:** Noted in B.4 Technology Stack (KILL Framer Motion ~32KB, DEFER Three.js/R3F).
 
-6. **WebSocket heartbeat timeout not specified.** TelemetryContext sends pings but the spec did not say when to consider the connection dead. **Resolved:** Added 5s pong timeout to B.3.2.
+6. **WebSocket heartbeat timeout not specified.** `TelemetryContext` sends pings but the spec did not define when to consider the connection dead. **Resolved:** Added 5s pong timeout to B.3.2.
+
+**Phase 2 oversights (identified during B.5–B.11 distillation):**
+
+7. **No client-side validation strategy was defined.** B.5 recommends Zod but did not specify where validation runs or how errors surface. **Resolved:** Validation runs at the API client boundary (`atlasClient.ts` response parsing). Validation errors trigger the toast/notification system (see #8) with "data format error — backend may have changed" message. Failed validation returns a typed error, not `undefined`.
+
+8. **No user notification system was specified.** B.7 identified the missing toast gap but no section defined the solution. **Resolved:** Phase 1 must include a minimal `Toast`/`Notification` component. Requirements: auto-dismiss after 5s, manual dismiss via ✕, severity levels (info/warn/error), max 3 concurrent toasts, accessible (`role="alert"`, `aria-live="assertive"` for errors).
+
+9. **SSE reconnection has no backoff or cap.** B.7 noted the 2s flat delay but the spec did not prescribe correct behavior. **Resolved:** SSE reconnection must use exponential backoff (2s → 4s → 8s → 16s → 30s cap) with max 10 attempts. After exhausting retries, show a persistent "connection lost — click to retry" banner (not auto-dismissing).
+
+10. **Configuration centralization was not mandated.** B.9 listed 12 hardcoded values with a recommendation, but did not make it a Phase 1 requirement. **Resolved:** `src/config.ts` is a Phase 1 deliverable (not optional). All magic numbers from B.9 must be sourced from this module. See B.9 for the reference implementation.
+
+11. **No code-splitting strategy.** B.5 notes no code splitting is configured, and B.4 DEFER’d 3D and graph components, but there was no specification for how to prevent DEFER’d code from entering the Phase 1 bundle. **Resolved:** Phase 1 must use `React.lazy()` + dynamic `import()` for all DEFER’d component groups. Build verification test: assert that main chunk output does not contain imports from DEFER’d packages (`three`, `cytoscape`, `reactflow`, `react-grid-layout`).
+
+**A.4 Coverage Matrix:**
+
+| A.4 Item | Where Addressed | Completeness |
+|----------|----------------|--------------|
+| #1 Scope explosion (80+ components) | B.4: 25 REBUILD / 38 DEFER / 28 KILL | ✓ Full triage |
+| #2 Zero frontend tests | B.8: Vitest + RTL + MSW; CT-01–CT-08 acceptance tests; ≥80% coverage gate | ✓ Strategy + specific tests |
+| #3 Tech stack decision | B.5: Keep React 19/Vite/Tailwind, KILL 15+ packages, ADD Zod + query lib | ✓ Evaluated + decisioned |
+| #4 API contract drift | B.8: MSW fixtures from OpenAPI spec; B.6: 6 typed interfaces; B.11 D7: undocumented events | ✓ Multi-layer coverage |
+| #5 3D visualization complexity | B.4: DEFER verdict; B.7: dedicated error boundary; B.11 D4: 20-file sub-arch documented | ✓ Risk contained |
 
 ### B.13 Design Quality Scorecard
 
-| Criterion | Score (1-9) | Justification |
+| Criterion | Score (1–5) | Justification |
 |---|---|---|
-| **Completeness** — Every A.2 component triaged | 9 | All 91 files from A.2 received REBUILD/DEFER/KILL verdict. No omissions. |
-| **Specificity** — Contracts specific enough to code against | 8 | HTTP endpoints, SSE event format, WebSocket protocol, TS types, context shape all specified. Codegen pipeline is directional (tool TBD). |
-| **Consistency** — Aligned with Volume 0 principles | 8 | R8 (observable), R9 (monorepo/co-located), P7 (smaller and working), A1 (anti-pattern identified and addressed). |
-| **Honesty** — Killed what should die, no padding | 9 | 28 files KILL'd including painful cuts (ToolCallList, MessageActions). No files kept for sentimental value. |
-| **Brevity** — No filler, no padding | 7 | B.3 interface contracts are thorough (necessary for "code against" bar). Could be more compressed but completeness requires it. |
+| **Completeness** — All B-sections filled, no stubs | 5 | B.1–B.13 complete. Every section contains substantive analysis derived from source code reading. |
+| **Specificity** — Contracts precise enough to code against | 4 | TS interfaces with field types, endpoint paths, localStorage keys, config values, SSE event types all specified. Query library choice left as recommendation (Zod is mandated). |
+| **Consistency** — Aligns with Volume 0 principles | 5 | R8 (observable: HealthContext, telemetry WS, 14 system views), R9 (monorepo: Vite proxy to backend), P7 (smaller: 25 REBUILD from 91 files), A1 (scope explosion identified, triaged, resolved). |
+| **Honesty** — Real problems called out, no glossing | 5 | 4 critical error handling gaps, 7 non-trivial discoveries, 11 oversights across 2 phases. Zero-validation, duplicate clients, god components, dead code all confronted directly. |
+| **Brevity** — Dense signal, no filler content | 4 | B.3 interface contracts and B.6 data model are thorough by necessity ("codeable" bar). B.10 lessons cite specific files and line-level patterns. Some sections could compress further. |
+| **Traceability** — Every A.4 item has B-section coverage | 5 | All 5 A.4 known failures have explicit cross-references in B.12 coverage matrix with completeness indicators. |
+| **Actionability** — Recommendations are implementable today | 4 | Each discovery (B.11) and oversight (B.12) includes a specific, concrete resolution. `src/config.ts` reference implementation provided. Component decomposition targets named. |
+| **Risk Awareness** — Failure modes and edge cases documented | 4 | Polling thundering-herd (D3), missing UUID fallback (D6), SSE reconnection weakness, empty catch blocks, 3D sub-architecture isolation all documented with mitigations. |
+| **Integration** — Cross-volume dependencies identified | 3 | Voice subsystem reference (L8 → Volume 6), undocumented SSE events (D7 → Volume 2), Pydantic ↔ Zod schema mirroring (B.5 → Volume 3). Did not exhaustively map all Volume 2 API contract touchpoints. |
 
-**Total: 41/45** (passing threshold: 30/45)
+**Total: 39/45** (passing threshold: 30/45)
 
 ---
 
@@ -685,3 +968,5 @@ Every component from A.2 receives a REBUILD / DEFER / KILL verdict.
 | v3 | 2026-03-10 | Oz | Added Doc ID field (`DB-V07-001`) per PROJECT_CONVENTIONS.md Section 9.4 | Added unique document number for machine searching |
 | v4 | 2026-03-10 | Oz | Added CORE/PERIPHERAL classification to A.2 Source Manifest per DISTILLATION_PROTOCOL.md Section 5 | Labeled which files agents should read in full vs. skim during Phase 1 |
 | v5 | 2026-03-10 | Vol-07 Distillation Agent | Phase 1 distillation complete — filled B.1 (purpose: single observability surface, 6 design imperatives), B.2 (8 major components, ASCII layout, data flow, proxy architecture), B.3 (17 HTTP endpoints, WebSocket protocol, context shape, 10 TS types, shared contracts, state persistence, dependency map), B.4 (25 REBUILD, 38 DEFER, 28 KILL with technology stack verdict), B.12 (6 oversights identified and resolved), B.13 (41/45 quality score) | The analysis agent read all 91 source files, wrote the design specification for what the console should look like when rebuilt, decided what to keep (25 files), postpone (38 files), and delete (28 files), and graded its own work |
+| v6 | 2026-03-11 | Vol-07 Distillation Agent | Phase 2 distillation complete — filled B.5 (tech choices: keep React 19/Vite/Tailwind, KILL 15+ packages, ADD Zod), B.6 (6 TS interfaces, localStorage persistence model, HealthState shape, data flow), B.7 (2 error boundaries, 4 critical gaps, per-client strategy audit), B.8 (Vitest/RTL/MSW stack, 8 acceptance tests CT-01–CT-08, 5 regression tests), B.9 (5 build-time + 12 runtime configs, `src/config.ts` deliverable), B.10 (10 subsystem lessons), B.11 (7 discoveries), B.12 updated (11 oversights total + A.4 coverage matrix), B.13 rescored (39/45) | The analysis agent completed all remaining design sections by deep-reading API clients, contexts, state management, and configuration; documented every technology decision, data shape, error handling gap, and configuration value; identified 7 non-obvious discoveries and 5 additional oversights |
+
