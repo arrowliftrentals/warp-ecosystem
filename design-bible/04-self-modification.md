@@ -6,13 +6,13 @@
 | **Name** | Volume 4: Self-Modification & Sandbox |
 | **Purpose** | Design specification for the self-improvement pipeline — propose, test, validate, and apply code changes with sandbox safety |
 | **Owner** | Design Bible / Volume 4 |
-| **Status** | `draft` (scaffold — Part A pre-loaded, Part B awaiting distillation agent) |
+| **Status** | `phase-2-complete` |
 | **Supersedes** | N/A |
 | **Superseded by** | N/A |
-| **Author** | Oz (Part A) / TBD distillation agent (Part B) |
-| **Version** | v4 |
+| **Author** | Oz (Part A) / Distillation Agent V4 (Part B) |
+| **Version** | v6 |
 | **Created** | 2026-03-10 |
-| **Last Modified** | 2026-03-10 |
+| **Last Modified** | 2026-03-11 |
 
 ---
 
@@ -724,31 +724,281 @@ macOS screenshot capture. Not related to self-modification. If needed, belongs i
 **Summary:** 14 REBUILD, 12 DEFER, 32 KILL. The rebuild targets ~8 files in `self_modify/` and ~4 files in `sandbox/` — a 79% reduction from 58 files. This aligns with Volume 0 principles P7 (smaller and working) and A5 (scope explosion prevention).
 
 ### B.5 Technology Choices
-*[To be filled by distillation agent]*
+
+**Language:** Python 3.11+ (per PROJECT_CONVENTIONS.md Section 3).
+
+**Docker SDK (`docker` PyPI package):** The sole sandbox backend. Attempt 3 also implemented UTM/Parallels providers; both are KILLED. Docker is the only provider that functioned in practice. The `DockerProvider` uses lazy connection initialization with a retry chain: config URL → env var → macOS Desktop socket → `from_env()`. This strategy is retained because it handles the macOS Docker Desktop socket discovery that the standard `from_env()` misses.
+
+**HMAC-SHA256 (stdlib `hmac` + `hashlib`):** All validation evidence is signed with HMAC-SHA256. The key is loaded from an environment variable (`ATLAS_VERIFICATION_KEY`) or derived from the machine ID. Attempt 3 used `secure_key_manager.py` with macOS Keychain integration — this is KILLED as over-engineering for a single-user local system. An env var or config file entry is sufficient; the HMAC protects against LLM forgery of test results, not against a sophisticated adversary with host access.
+
+**SSH/SCP (system tools):** `SandboxExecutor` communicates with Docker containers via SSH (port-forwarded from container port 22). This is retained because it provides a clean, provider-agnostic execution interface. `DockerExecutor` provides an alternative path using the Docker exec API directly (no SSH overhead) for local-only use.
+
+**`rsync`:** Codebase cloning from host to sandbox uses rsync with `--update --delete --chmod=Du+w,Fu+w`. This enables fast incremental syncs on repeated operations. Retained as-is.
+
+**AST (`ast` stdlib):** `APIContractValidator` and `ValidationOrchestrator` (syntax stage) use Python's `ast` module for static analysis. No external dependency required.
+
+**Pydantic v2:** All schemas use `pydantic.BaseModel` with `Field()` constraints. Attempt 3 used `dataclasses` for `CodeChange`, `ImprovementProposal`, and all risk/approval types. The rebuild converts every data type to Pydantic `BaseModel` for consistency with P8 and shared contracts.
+
+**`structlog`:** Replaces `loguru` (Attempt 3's logger). Per PROJECT_CONVENTIONS.md Section 7, all logging uses `structlog` for structured JSON output.
+
+**No external ML dependencies:** This subsystem is purely symbolic. No BERT, no FAISS, no ML models. All decisions are deterministic heuristic evaluations.
+
+**Departures from defaults:**
+- Docker SDK is an additional dependency not in the base shared layer. Justified: it is the sandbox runtime and cannot be replaced by stdlib.
+- `paramiko` (SSH library) may be needed if system SSH is unavailable. The rebuild should prefer system `ssh`/`scp` first and fall back to `paramiko` only if needed.
 
 ### B.6 Data Model
-*[To be filled by distillation agent]*
+
+All schemas owned by Volume 4 are consolidated in `atlas/self_modify/schemas.py` per shared contract Section 1.7. The schemas defined inline in B.3 (sections 3.1–3.10) are the canonical definitions. This section documents the ownership and cross-volume boundaries.
+
+**Owned schemas (Volume 4, in `atlas/self_modify/schemas.py`):**
+
+- `CodeChange` (B.3 section 3.1) — frozen BaseModel, single proposed code modification
+- `ProposalStatus` (B.3 section 3.1) — enum: PENDING, APPLIED, REJECTED, ROLLED_BACK
+- `ImprovementProposal` (B.3 section 3.1) — mutable BaseModel, full proposal with validation state
+- `RiskLevel` (B.3 section 3.4) — enum: LOW, MEDIUM, HIGH, CRITICAL
+- `RiskFactor` (B.3 section 3.4) — individual gate result with score
+- `RiskAssessment` (B.3 section 3.4) — 7-gate evaluation with `auto_approve_eligible` flag
+- `ValidationTheaterIssue` (B.3 section 3.3) — frozen BaseModel, theater detection finding
+- `ApprovalResult` (B.3 section 3.5) — approval/rejection with reason
+- `ValidationStage` (B.3 section 3.6) — enum: SYNTAX, IMPORTS, API_CONTRACTS, PATTERNS, INTENT
+- `StageResult` (B.3 section 3.6) — single validation stage outcome
+- `OrchestratorResult` (B.3 section 3.6) — 5-stage validation summary
+- `APIViolation` (B.3 section 3.7) — single API contract violation
+- `APIValidationResult` (B.3 section 3.7) — API validation summary
+- `ExecutionResult` (B.3 section 3.9) — sandbox command output with optional HMAC signature
+- `ResourceLimits` — Pydantic model for sandbox operational constraints (from `resource_guard.py`, moved to schemas)
+- `DiskReport` — Docker disk usage report (from `resource_guard.py`, moved to schemas)
+
+**Additional schema details for `ResourceLimits` and `DiskReport`** (not in B.3, derived from `resource_guard.py` source):
+
+```python
+class ResourceLimits(BaseModel):
+    """Operational resource constraints for sandbox."""
+    max_docker_disk_gb: float = Field(default=15.0, ge=1.0)
+    max_snapshots: int = Field(default=2, ge=1)
+    snapshot_retention_hours: float = Field(default=4.0, ge=0.5)
+    min_host_free_gb: float = Field(default=10.0, ge=1.0)
+    auto_prune: bool = True
+
+class DiskReport(BaseModel):
+    """Docker disk usage report."""
+    total_gb: float
+    used_gb: float
+    available_gb: float
+    usage_percent: float
+    over_limit: bool
+```
+
+**Consumed schemas (from Volume 1 `atlas/memory/schemas.py`, per C-07 resolution):**
+- `CommandEvidence` — signed execution output (HMAC-SHA256). Defined in B.3 section 3.2.
+- `ValidationClaim` — claim with type, statement, evidence, fact_id. Defined in B.3 section 3.2.
+- `ValidationClaimType` — enum: TESTS_PASSED, LINTING_CLEAN, TYPE_CHECK_CLEAN. Defined in B.3 section 3.2.
+
+Volume 4 imports these from Volume 1; it does not redefine them. The behavioral interface (`sign_command_output`, `verify_signature`, `claim_validation`) lives in Volume 4's `VerificationTracker`.
+
+**Proposal ID format change:** Attempt 3 generates IDs as `datetime.now().strftime("%Y%m%d_%H%M%S")`. The rebuild uses `f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{secrets.token_hex(4)}"` to prevent collisions under concurrent use.
 
 ### B.7 Error Handling
-*[To be filled by distillation agent]*
+
+All errors inherit from `atlas.shared.errors.SandboxError` per PROJECT_CONVENTIONS.md Section 6.
+
+**Error hierarchy:**
+
+```
+SandboxError(AtlasError)
+├── ValidationTheaterError(SandboxError)
+│   """Validation claim lacks cryptographic proof or evidence is stale/forged."""
+├── IntegrityViolation(SandboxError)
+│   """Critical file hash mismatch — tampering detected."""
+├── SandboxExecutionError(SandboxError)
+│   """Command execution in sandbox failed (timeout, SSH failure, etc.)."""
+├── SandboxProvisionError(SandboxError)
+│   """Docker container creation, start, or snapshot failed."""
+└── ProposalRejectedError(SandboxError)
+    """Proposal auto-rejected due to risk or theater detection."""
+```
+
+**Propagation rules per Volume 0 P5 (silent failure is a system fault):**
+
+1. `ValidationTheaterError` — raised by `VerificationTracker.verify_signature()` when evidence is stale (>1 hour) or signature mismatches. Propagates to `SelfModifier` which sets `proposal.status = REJECTED` and logs the full error context. Never swallowed.
+2. `IntegrityViolation` — raised by `IntegrityGuard.verify_integrity()` when critical file hashes differ from sealed values. Propagates as a fatal error. The system halts self-modification operations until the violation is resolved (either the change is committed to git, or the guard is re-sealed).
+3. `SandboxExecutionError` — raised by `SandboxExecutor` on SSH timeout, connection failure, or non-zero exit code (when exit_code checking is enabled). Propagates to the caller. The caller logs context and may retry once before failing the proposal.
+4. `SandboxProvisionError` — raised by `DockerProvider` when container lifecycle operations fail. Propagates immediately; no retry (Docker failures are typically configuration issues, not transient).
+5. `ProposalRejectedError` — raised by `ApprovalAutomator` when `MetaCognitiveMonitor` detects critical theater issues or `RiskAssessor` scores CRITICAL. Propagates to the orchestrator which logs the rejection and stores it in L4.
+
+**Recovery strategy:**
+- Sandbox failures: Snapshot-and-rollback via `SandboxManager.with_snapshot_protection()` (B.3 section 3.8). If the operation fails, the container is restored to the pre-operation snapshot.
+- Proposal failures: The proposal is saved with `status=REJECTED` and the rejection reason. No partial state is left.
+- Integrity failures: No automatic recovery. The guard requires either a git commit of the changes or an explicit `force_reseal()` (development mode only).
+
+**Forbidden patterns (from Volume 0 A4):**
+- `except: pass` — every handler logs with context.
+- `except Exception: return None` — errors propagate or are explicitly converted to rejection reasons.
+- Attempt 3 had `try: _verify_integrity() except: pass` in `verification_tracker.py` — this is removed. If integrity verification fails at module load time, the system logs a warning but does not silently bypass the check during operations.
 
 ### B.8 Testing Strategy
-*[To be filled by distillation agent]*
+
+**Acceptance test (MVA-level, mandatory per P11):**
+
+One acceptance test proves the self-modification pipeline works end-to-end against the live server:
+
+- **AT-SELFMOD-01: Propose and validate a trivial change.**
+  1. Start the Atlas server.
+  2. POST a proposal via the self-modification API (or invoke `SelfModifier.propose_improvement()` programmatically).
+  3. The proposal adds a comment to a non-critical file.
+  4. Verify: sandbox is created, tests run inside sandbox, `VerificationTracker` signs the test output (B.3 section 3.2), `MetaCognitiveMonitor` finds no theater issues (B.3 section 3.3), `RiskAssessor` rates it LOW (B.3 section 3.4), `ApprovalAutomator` auto-approves (B.3 section 3.5).
+  5. Verify: the proposal is stored with `status=APPLIED` and a signed `ValidationClaim` exists in L4 memory.
+  6. Verify: the proposal can be rolled back by restoring the git branch.
+  7. Entire flow completes in under 10 minutes.
+  This test would FAIL if the implementation were deleted or stubbed.
+
+**Integration tests (real components, no mocks at boundaries):**
+
+- **IT-VERIFY-01:** `VerificationTracker` signs a command output, stores claim in L4 (real test SQLite DB), retrieves and verifies the claim. Tests freshness rejection (evidence >1 hour old raises `ValidationTheaterError`).
+- **IT-SANDBOX-01:** `SandboxManager` creates a Docker container, `SandboxExecutor` runs `echo hello` via SSH, verifies stdout. Requires Docker running.
+- **IT-MONITOR-01:** `MetaCognitiveMonitor.analyze_proposal()` receives a proposal dict with no execution logs, detects `claimed_validation_without_execution` (critical). Receives a clean proposal, returns empty list.
+- **IT-RISK-01:** `RiskAssessor.assess_proposal()` with 100% test pass rate, no critical files, small scope → auto-approve eligible. Same with 1 failing test → not eligible.
+- **IT-VALIDATION-01:** `ValidationOrchestrator.validate()` with valid Python code → passes all stages. With syntax error → fails at stage 1. With `memory.l7.get_state()` call → `APIContractValidator` catches the missing method.
+- **IT-APPROVAL-01:** `ApprovalAutomator.evaluate_proposal()` integrates monitor + assessor. Clean proposal → auto-approved. Proposal with theater issue → rejected.
+
+**Unit tests (mocks allowed):**
+
+- `RiskAssessor`: Each of the 7 gates tested individually with crafted input dicts.
+- `MetaCognitiveMonitor`: Each of the 7 heuristic checks tested with positive and negative cases.
+- `APIContractValidator`: Known API registry validation, `add_known_api()` extension, method chain parsing.
+- `IntegrityGuard`: `seal_integrity()`, `verify_integrity()` with tampered file, git-committed detection.
+- `CodeAnalyzer`: AST parsing, class/function extraction, cyclomatic complexity calculation.
+
+**Regression tests (from A.4 known failures):**
+
+- **REG-01 (A.4 item 1 — scope explosion):** Verify the rebuild has ≤14 files in `self_modify/` and ≤4 in `sandbox/`. A test that counts files enforces this.
+- **REG-02 (A.4 item 2 — validation theater):** Attempt to create a proposal without running tests in sandbox. Verify `VerificationTracker` rejects it. Attempt to reuse stale evidence. Verify freshness check catches it.
+- **REG-03 (A.4 item 3 — meta-meta monitoring):** Verify `MetaMetaMonitor` class does not exist in the rebuild. A grep-based test.
+- **REG-04 (A.4 item 4 — Docker dependency):** Verify `SandboxManager` works with Docker only. Verify no UTM/Parallels imports exist.
+
+**Test markers (per PROJECT_CONVENTIONS.md):**
+- `@pytest.mark.smoke` — boot server, verify self-modify endpoint exists.
+- `@pytest.mark.acceptance` — AT-SELFMOD-01.
+- `@pytest.mark.integration` — IT-* tests. Requires Docker for sandbox tests.
+- `@pytest.mark.unit` — unit tests, mocks allowed.
 
 ### B.9 Configuration
-*[To be filled by distillation agent]*
+
+All configuration loaded via `AtlasConfig(BaseSettings)` with `ATLAS_` prefix.
+
+**Self-modification settings:**
+
+- `ATLAS_ENABLE_SELF_MODIFY` (`bool`, default `False`) — Feature flag. Must be explicitly enabled. When False, the `SelfModifier` is not instantiated at startup.
+- `ATLAS_SANDBOX_PROVIDER` (`str`, default `"docker"`) — Sandbox provider. Only `"docker"` is supported in the rebuild.
+- `ATLAS_SANDBOX_IMAGE` (`str`, default `"atlas-sandbox-python:latest"`) — Default Docker image for sandboxes.
+- `ATLAS_SANDBOX_MEMORY_MB` (`int`, default `512`) — Memory limit per sandbox container.
+- `ATLAS_SANDBOX_SSH_PORT` (`int`, default `2222`) — Default SSH port for sandbox executor. Dynamic port discovery overrides this.
+- `ATLAS_SANDBOX_SSH_PASSWORD` (`str`, default `"atlas"`) — SSH password for sandbox containers.
+- `ATLAS_SANDBOX_TIMEOUT` (`float`, default `30.0`) — Default command timeout in seconds.
+- `ATLAS_VERIFICATION_KEY` (`str`, default `""`) — HMAC key for `VerificationTracker`. If empty, derived from machine ID.
+- `ATLAS_SANDBOX_MAX_DOCKER_DISK_GB` (`float`, default `15.0`) — Maximum Docker disk usage before operations are blocked.
+- `ATLAS_SANDBOX_MAX_SNAPSHOTS` (`int`, default `2`) — Maximum snapshots per container.
+- `ATLAS_SANDBOX_SNAPSHOT_RETENTION_HOURS` (`float`, default `4.0`) — Auto-prune snapshots older than this.
+- `ATLAS_SANDBOX_MIN_HOST_FREE_GB` (`float`, default `10.0`) — Minimum host free disk in GB. Operations blocked below this.
+- `ATLAS_SANDBOX_AUTO_PRUNE` (`bool`, default `True`) — Auto-prune Docker resources when limits exceeded.
+- `ATLAS_RISK_MAX_FILES_AUTO_APPROVE` (`int`, default `3`) — Max files changed for auto-approval eligibility.
+- `ATLAS_RISK_MAX_LINES_AUTO_APPROVE` (`int`, default `200`) — Max lines changed for auto-approval eligibility.
+- `ATLAS_DOCKER_BASE_URL` (`str`, default `""`) — Explicit Docker daemon URL. If empty, auto-discovery.
+
+**Loading:** All settings are fields on `AtlasConfig` (or a `SelfModifyConfig` sub-model composed into `AtlasConfig`). Loaded from environment variables and `.env` file by `pydantic-settings`. No YAML config files.
+
+**Feature flag behavior:** When `ATLAS_ENABLE_SELF_MODIFY=False` (default), the self-modification subsystem is not initialized. The API endpoint returns 503 Service Unavailable. When enabled, all sub-components (VerificationTracker, MetaCognitiveMonitor, RiskAssessor, ApprovalAutomator, SandboxManager) are instantiated during server startup. If Docker is unavailable at startup, the subsystem logs a warning and sets its health to DEGRADED (not HEALTHY).
 
 ### B.10 Subsystem Lessons Learned
-*[To be filled by distillation agent]*
+
+**L10.1 — 49 files is a codebase, not a subsystem.**
+Attempt 3's `self_modify/` directory contained 49 Python files — more than many entire projects. The root cause: each security concern (imports, subprocess, database, interpreter, dependencies, timestamps, remote attestation, process isolation, code execution) was given its own module with its own guard class. This created a combinatorial explosion of modules that were individually simple but collectively incomprehensible. The rebuild collapses all security enforcement into two components: `IntegrityGuard` (file hash verification at startup) and `VerificationTracker` (HMAC signing of execution output). Everything else is removed.
+
+**L10.2 — Monkey-patching is an anti-pattern for security.**
+`subprocess_enforcer.py` monkey-patched `subprocess.Popen`. `code_execution_monitor.py` monkey-patched `eval`/`exec`/`compile`. `import_guard.py` installed a custom import hook. These approaches are fragile (break third-party libraries), bypassable (an attacker who can write code can undo a monkey-patch), and create debugging nightmares (errors appear in unexpected locations). The rebuild uses no monkey-patching. Security is enforced at the pipeline level (VerificationTracker signs output, MetaCognitiveMonitor audits proposals) not at the runtime level.
+
+**L10.3 — The meta-meta-monitor was premature abstraction.**
+`meta_meta_monitor.py` tracked TP/FP/TN/FN outcomes of the meta-cognitive monitor and proposed improvements. This is a sophisticated self-improvement loop that presupposes a functioning base system. In practice, the base system (self-modification pipeline) was never fully integrated, so the meta-meta layer was monitoring nothing. The rebuild removes this layer entirely. If the `MetaCognitiveMonitor` is ineffective, improve it directly in code.
+
+**L10.4 — Global singletons hindered testing.**
+`approval_automator.py`, `integrity_guard.py`, and `validation_orchestrator.py` all used global singleton patterns with `_global_*` module-level variables and `get_*()` / `initialize_*()` functions. This made testing impossible without careful teardown between tests, and created hidden coupling. The rebuild uses constructor injection exclusively — each component receives its dependencies in `__init__()`, and the server startup code composes them.
+
+**L10.5 — Docker macOS socket discovery is non-trivial.**
+The Docker SDK's `from_env()` fails on macOS when Docker Desktop uses `~/.docker/run/docker.sock` instead of the default `/var/run/docker.sock`. Attempt 3 solved this with a retry chain in `DockerProvider._try_connect()` that tries config URL → env var → macOS socket → `from_env()`. This pattern is retained because it addresses a real platform-specific issue.
+
+**L10.6 — rsync incremental sync was a genuine optimization.**
+The original `clone_to_sandbox()` used full `cp -r` for every proposal, taking minutes for a large codebase. The switch to `rsync --update --delete` reduced subsequent clones to seconds. This is retained.
+
+**L10.7 — CognitiveFabric and CodebaseAwareness coupling was wrong-subsystem.**
+`modifier.py` imported and consulted `CognitiveFabric` and `CodebaseAwareness` before every proposal. These are intelligence/orchestrator concerns (Volume 5 / Volume 2), not self-modification concerns. The rebuild removes these couplings. If the orchestrator wants to consult knowledge systems before proposing a change, it does so before calling `SelfModifier.propose_improvement()`, not inside the modifier.
 
 ### B.11 Discoveries
-*[To be filled by distillation agent]*
+
+**D11.1 — Attempt 3's `fix_templates.py` returned `False # TODO: implement`.**
+This is an instance of anti-pattern A7 (TODO in production code) within the self-modification system itself — the system that is supposed to prevent A7. The fix templates that shipped as "fixes" contained placeholder return values. This went undetected because the proposal pipeline checked whether tests passed in the sandbox, not whether the proposed fix was semantically meaningful. The rebuild's `MetaCognitiveMonitor` must include a heuristic check for TODO/placeholder patterns in proposed code changes (heuristic #7 in B.3 section 3.3 is `todo_placeholder_in_changes` — this was added based on this discovery).
+
+**D11.2 — The `KNOWN_APIS` registry in `api_contract_validator.py` is manually maintained.**
+The API contract validator hardcodes valid methods for each memory layer (`l1`, `l4`, `l7`, etc.). This means the validator becomes stale whenever the memory layer API changes. The rebuild should add an `add_known_api()` call during server startup that introspects the actual `MemoryManager` instance and registers its methods dynamically (B.3 section 3.7 already specifies this method). The hardcoded registry serves as a fallback for offline validation.
+
+**D11.3 — Proposal IDs are timestamp-based and non-unique under concurrent use.**
+Attempt 3 generates proposal IDs as `datetime.now().strftime("%Y%m%d_%H%M%S")`. Two proposals created within the same second collide. The rebuild uses `f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{secrets.token_hex(4)}"` to add a random suffix.
+
+**D11.4 — `ResourceGuard` Pydantic schemas are well-designed and reusable.**
+`resource_guard.py` contains `ResourceLimits` and `DiskReport` Pydantic models with excellent field descriptions and sensible defaults. These are a model for how operational constraints should be specified. This pattern (Pydantic model for operational limits with validated defaults) should be adopted for other subsystems with resource constraints.
+
+**D11.5 — `VMProviderBase` is a clean Protocol candidate.**
+The `vm_provider.py` ABC defines a clean contract for sandbox providers. Phase 1 (B.4) correctly marks this as REBUILD as a `typing.Protocol`. `DockerProvider` implements the protocol. No registration or metaclass overhead needed.
 
 ### B.12 Oversight Self-Review
-*[To be filled by distillation agent — MANDATORY before submission]*
+
+**Q1: Does the design address every item in A.4 (Known Failures & Warnings)?**
+
+1. **A.4 item 1 — 49 files is extreme scope explosion:** Addressed. B.4 triages to 14 REBUILD, 12 DEFER, 32 KILL — a 79% reduction. B.10 L10.1 explains the root cause (each security concern got its own module). B.8 REG-01 enforces the file count limit.
+2. **A.4 item 2 — Validation theater risk:** Addressed. B.1 states this subsystem's core job is making validation theater structurally impossible. B.3 section 3.2 defines `VerificationTracker` with HMAC-SHA256 signing. B.3 section 3.3 defines `MetaCognitiveMonitor` with 7 heuristic checks. B.7 defines `ValidationTheaterError` propagation. B.8 REG-02 tests theater rejection.
+3. **A.4 item 3 — Meta-meta monitoring over-engineering:** Addressed. B.4 KILLs `meta_meta_monitor.py`, `monitor_effectiveness.py`, and `monitor_evolution.py`. B.10 L10.3 explains why. B.8 REG-03 verifies the class does not exist in the rebuild.
+4. **A.4 item 4 — Docker dependency:** Addressed. B.4 KILLs UTM/Parallels providers. B.5 states Docker is the sole backend. B.9 documents Docker-related config. B.10 L10.5 documents the macOS socket discovery issue. B.8 REG-04 verifies no UTM/Parallels imports.
+5. **A.4 item 5 — The 36-month roadmap:** Addressed. B.4 DEFER items map to autonomy roadmap phases: `design_validator.py` (Phase 2.3), `subsystem_architect.py` (Phase 2.3), `dependency_graph.py` (Phase 2.1), `self_improving_fixer.py` (requires learning pipeline). The rebuild implements Phase 1 (basic pipeline) only.
+
+**Q2: Are all shared contract obligations met?**
+
+Yes. Per `shared-contracts.md`:
+- Section 1.7 defines Vol 4's owned schemas (`CodeChange`, `ImprovementProposal`, `ProposalStatus`, `RiskLevel`, `RiskAssessment`, `ValidationTheaterIssue`, `ExecutionResult`). B.6 confirms all are defined.
+- Section 2.9 defines Vol 4 → Vol 1 boundary (`MemoryManager.l4.store_fact`, `query_facts`). B.3 section 3.2 consumes this.
+- Section 2.10 defines Vol 4 → Vol 9 boundary (`DecisionValidator.validate_intent`). B.3 section 3.6 consumes this.
+- Section 3 defines memory layer access: Vol 4 uses L4 (validation claim storage/query) and L7 (execution proof storage). B.2 and B.3 section 3.2 confirm this.
+
+**Q3: Are there any cross-volume conflicts not yet flagged?**
+
+No new conflicts. C-07 (verification schema ownership Vol 1 vs Vol 4) and C-15 (enforcement_orchestrator ownership Vol 4 vs Vol 9) are both resolved and reflected in the design. C-08 (OperationalDiagnostician → Vol 4 for RemediationEngine) is acknowledged in B.4 (DEFER for `design_validator.py`, which would consume remediation output).
+
+**Q4: Does the error handling comply with Volume 0 P5?**
+
+Yes. B.7 defines a specific error hierarchy under `SandboxError`. No `except: pass` blocks. Every handler logs context. `ValidationTheaterError` propagates to proposal rejection. `IntegrityViolation` halts operations. Attempt 3's `try: _verify_integrity() except: pass` pattern in `verification_tracker.py` is explicitly called out and removed.
+
+**Q5: Are acceptance tests defined per Volume 0 P11?**
+
+Yes. B.8 defines AT-SELFMOD-01, which tests the full pipeline against the live server: propose → sandbox → validate → sign → assess → approve → store. The test would fail if the implementation were deleted.
+
+**Q6: Is the scope contained per Volume 0 P7?**
+
+Yes. The rebuild targets ~8 files in `self_modify/` and ~4 in `sandbox/` (12 total), down from 58 in Attempt 3. B.4 summary confirms 14 REBUILD, 12 DEFER, 32 KILL. No new files are proposed that were not in the original manifest.
 
 ### B.13 Design Quality Scorecard
-*[To be filled by distillation agent — MANDATORY. Minimum passing score: 30/45]*
+
+| # | Criterion | Score (1-5) | Justification |
+|---|---|---|---|
+| 1 | **Volume 0 Alignment** | 5 | Every principle (P1, P4, P5, P7, P8, P11) is explicitly addressed. Anti-patterns A2, A5, A7 are directly countered. |
+| 2 | **Shared Contract Compliance** | 5 | All schemas from Section 1.7, API boundaries from Sections 2.9/2.10, and memory access from Section 3 are met. |
+| 3 | **Interface Completeness** | 4 | 10 interface contracts defined with full signatures (B.3 sections 3.1–3.10). `IntegrityGuard.get_status()` return type could be more specific (dict vs. typed model). |
+| 4 | **Scope Discipline** | 5 | 79% file reduction (58 → 12). 32 KILL decisions with specific rationale for each. No scope creep. |
+| 5 | **Error Handling Rigor** | 4 | Full hierarchy under `SandboxError`. All propagation paths documented. One gap: `SandboxExecutor` retry logic is described but not fully specified (how many retries, backoff). |
+| 6 | **Testing Coverage** | 4 | 1 acceptance test, 6 integration tests, unit tests for all components, 4 regression tests. Missing: performance test for the 10-minute pipeline budget. |
+| 7 | **Configuration Clarity** | 5 | 16 config keys documented with types, defaults, and descriptions. Feature flag behavior specified. No ambiguity. |
+| 8 | **Lessons Specificity** | 5 | 7 lessons, all specific to this subsystem with concrete evidence from source code. No generic advice. |
+| 9 | **Self-Review Thoroughness** | 5 | All 6 questions answered. All 5 A.4 items addressed with specific section references. Cross-volume conflicts checked. |
+
+**Total: 42/45** (passing threshold: 30/45)
 
 ---
 
@@ -760,3 +1010,5 @@ macOS screenshot capture. Not related to self-modification. If needed, belongs i
 | v2 | 2026-03-10 | Oz | Added documentation standard header/footer per PROJECT_CONVENTIONS.md Section 9 | Added tracking metadata so we know who changed what and when |
 | v3 | 2026-03-10 | Oz | Added Doc ID field (`DB-V04-001`) per PROJECT_CONVENTIONS.md Section 9.4 | Added unique document number for machine searching |
 | v4 | 2026-03-10 | Oz | Added CORE/PERIPHERAL classification to A.2 source manifest per DISTILLATION_PROTOCOL.md Section 5 | Tagged files as essential vs. nice-to-have for the rebuild analysis |
+| v5 | 2026-03-10 | Distillation Agent V4 | Phase 1 distillation — B.1-B.4 filled: subsystem purpose, 5-component architecture with ASCII diagram, 10 interface contracts (3.1–3.10), scope triage of all 58 files (14 REBUILD, 12 DEFER, 32 KILL = 79% reduction) | Completed the first analysis pass defining what to keep, what to throw away, and how the pieces connect |
+| v6 | 2026-03-11 | Distillation Agent V4 (Phase 2) | Phase 2 distillation — B.5-B.13 filled: technology choices (Docker SDK, HMAC-SHA256, structlog), data model (16 Pydantic schemas + 2 operational models), error hierarchy (5 types under SandboxError), testing strategy (1 acceptance + 6 integration + 4 regression), 16 config keys, 7 subsystem lessons, 5 discoveries, full self-review addressing all 5 A.4 items, scorecard 42/45 | Completed the detailed design spec covering every technical decision needed to rebuild the self-modification system from scratch |
