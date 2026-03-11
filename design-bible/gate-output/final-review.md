@@ -159,9 +159,9 @@ All 10 volumes' self-scores were independently verified. Maximum delta was 1 poi
 Vol 5 B.10 L-INT-05 requires IntellectualProfile as a first-class field on Vol 1's L9 UserProfile schema. This is acknowledged in Vol 5 B.13 criterion 9 but not formalized as a shared-contracts change. Vol 1 must accept this schema extension.
 **Severity: LOW** — Vol 5 is Phase 4; Vol 1 can add the field when Vol 5 is built.
 
-**GAP-02: Governance schema migration (Vol 1 → Vol 9)**
-GovernedOutput, ExtractedClaim, EvidenceItem, and related schemas currently live in `src/memory/schemas.py` (Vol 1). Vol 9 B.6 specifies they should move to `governance/schemas.py`. The migration requires Vol 1 to release ownership.
-**Severity: MEDIUM** — must be resolved before Phase 2 coding begins to avoid import tangles.
+**GAP-02: Governance schema migration (Vol 1 → Vol 9)** — **RESOLVED**
+GovernedOutput, ExtractedClaim, EvidenceItem, and related schemas have been created in `atlas-v4/src/atlas/governance/schemas.py` with full Pydantic definitions. Vol 1 memory schemas no longer include governance types. All consumers import from `atlas.governance.schemas`.
+**Severity: ~~MEDIUM~~ CLOSED** — implemented in atlas-v4 skeleton.
 
 **GAP-03: process_query vs process_message naming (Vol 2 ↔ Vol 6 ↔ Vol 8)**
 Vol 6 B.3 references `OrchestratorEngine.process_query()`. Vol 8 B.6 maps `ChatRequest.query → ConversationEngine.process_message(message=...)`. The class name (OrchestratorEngine vs ConversationEngine) and method name (process_query vs process_message) both vary.

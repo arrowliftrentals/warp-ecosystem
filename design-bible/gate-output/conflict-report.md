@@ -225,10 +225,10 @@
 - Vol 9 B.6: "All governance Pydantic schemas live in `atlas/governance/schemas.py` per C-01 resolution."
 - Vol 9 B.3 Dependency 1: Acknowledges schemas "currently defined in `src/memory/schemas.py` owned by Volume 1."
 **Recommended resolution:** During Tier 0 implementation, create `governance/schemas.py` with Vol 9's schema definitions. Vol 1 removes governance schemas from its file. No re-export needed — all consumers import from `governance/schemas.py` directly. This must happen as the first coordination step.
-**Status:** resolved
-**Resolution:** Approved as recommended. Tier 0 task: create governance schema file, update all imports.
+**Status:** resolved — **IMPLEMENTED** in `atlas-v4/src/atlas/governance/schemas.py`
+**Resolution:** Approved as recommended. Governance schemas (GovernedOutput, ExtractedClaim, EvidenceItem, EvidenceContract, ValidationDecision, ContractResult, and all enums) created in `atlas/governance/schemas.py`. Vol 1 memory schemas no longer include governance types.
 
-### C-21: OperationalDiagnostician Implementation Approach (Vol 5 vs Vol 9)
+### C-21:
 **What:** Vol 5 B.11 D-INT-04 transfers OperationalDiagnostician to Vol 9 as a standalone component per C-08. Vol 9 B.12 plans to absorb it into DecisionValidator at Tier 4+ rather than maintaining it as a separate component.
 **Volumes:** 5 vs 9
 **Evidence:**
