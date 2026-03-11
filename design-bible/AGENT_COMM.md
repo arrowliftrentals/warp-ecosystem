@@ -10,7 +10,7 @@
 | **Supersedes** | N/A |
 | **Superseded by** | N/A |
 | **Author** | Oz |
-| **Version** | v5 |
+| **Version** | v6 |
 | **Created** | 2026-03-10 |
 | **Last Modified** | 2026-03-10 |
 
@@ -148,6 +148,41 @@ REASON: Integration wrappers exposing external service APIs as tool handlers.
 CONTESTED: no
 ```
 
+```
+CLAIM: ConversationEngine (engine.py — single entry point for all conversation processing)
+OWNER: Volume 2
+REASON: Central pipeline orchestrator: parse intent → retrieve context → generate response → govern output → record interaction.
+CONTESTED: no
+```
+
+```
+CLAIM: IntentParser (intent.py — three-tier intent classification: symbolic → BERT → LLM)
+OWNER: Volume 2
+REASON: Intent classification is the first stage of the conversation pipeline; symbolic grammar, ML advisory, and LLM fallback are orchestrator concerns.
+CONTESTED: no
+```
+
+```
+CLAIM: ResponseGenerator (response.py — response generation + ReAct engine + prompt building)
+OWNER: Volume 2
+REASON: Response generation including ReAct reasoning, prompt construction (SectionPriority), and deterministic templates.
+CONTESTED: no
+```
+
+```
+CLAIM: PersonalityManager (personality.py — personality loading + caching + system prompt injection)
+OWNER: Volume 2
+REASON: Personality injected into conversation pipeline system prompts. Immutable at runtime per P10.
+CONTESTED: no
+```
+
+```
+CLAIM: MemoryContextRetriever (memory_context.py — per-request memory context assembly from L3-L10)
+OWNER: Volume 2
+REASON: Retrieves and assembles context from Vol 1 memory layers for prompt enrichment. Token budget enforcement is an orchestrator concern.
+CONTESTED: no
+```
+
 ---
 
 ## Dependency Declarations (Agent-Registered)
@@ -176,10 +211,41 @@ STATUS: pending
 INTERFACE: ToolRegistry.list_tools() -> list[str]; SystemTools.get_tool_list(category) -> dict
 ```
 
+```
+DEPENDENCY: Volume 2 needs MemoryManager interface (session CRUD + per-layer queries L3-L10) from Volume 1
+STATUS: pending
+INTERFACE: MemoryManager.start_conversation(session_id), add_message(session_id, role, content), get_conversation(session_id), plus per-layer queries for L3-L10
+```
+
+```
+DEPENDENCY: Volume 2 needs DecisionValidator.validate() from Volume 9
+STATUS: pending
+INTERFACE: DecisionValidator.validate(intent: UnifiedIntent, command: str, context: dict | None) -> ValidationDecision
+```
+
+```
+DEPENDENCY: Volume 2 needs AnswerGovernor.govern() from Volume 9
+STATUS: pending
+INTERFACE: AnswerGovernor.govern(content: str, phase: OutputPhase, evidence_store: EvidenceStore | None) -> GovernedOutput
+```
+
+```
+DEPENDENCY: Volume 2 needs LLMProvider abstraction from shared infrastructure
+STATUS: pending
+INTERFACE: LLMProvider.generate(messages, model, temperature, tools) -> LLMResponse — model-independent (R6)
+```
+
+```
+DEPENDENCY: Volume 1 and Volume 10 must expose async interfaces to Volume 2
+STATUS: pending
+INTERFACE: All Vol 1 and Vol 10 methods consumed by Vol 2 must be async def. Sync implementations wrap internally.
+```
+
 ---
 
 ## Conflict Flags (Agent-Registered)
 *No new conflicts flagged by Volume 10 distillation. All ownership boundaries align with pre-registered decisions.*
+*No new conflicts flagged by Volume 2 Phase 2 distillation. All ownership boundaries align with pre-registered decisions.*
 
 ---
 
@@ -206,3 +272,4 @@ The integration gate agent produces its output in `design-bible/gate-output/`. S
 | v3 | 2026-03-10 | Oz | Added Doc ID field (`DB-X00-003`) per PROJECT_CONVENTIONS.md Section 9.4 | Added unique document number for machine searching |
 || v4 | 2026-03-10 | Oz | Added Integration Gate Output section referencing `gate-output/` directory and 6 output files per DISTILLATION_PROTOCOL.md | Added a section pointing to where the integration agent stores its analysis results |
 || v5 | 2026-03-10 | Distillation Agent V10 | Phase 1: Registered 7 ownership claims (ToolRegistry, tool schemas, core handlers, STEM backends, security/pentest stack, screen control, external integrations), 4 dependency declarations (MemoryManager from V1, DecisionValidator from V9, ToolRegistry execution to V2, tool introspection to V8). No new conflicts. | Volume 10 agent claimed all tool definitions, registries, and capability implementations; documented cross-volume interface needs |
+|| v6 | 2026-03-11 | Distillation Agent V02 | Phase 2: Registered 5 ownership claims (ConversationEngine, IntentParser, ResponseGenerator, PersonalityManager, MemoryContextRetriever), 5 new dependency declarations (MemoryManager from V1, DecisionValidator + AnswerGovernor from V9, LLMProvider from shared, async interface contract for V1/V10). No new conflicts. | Volume 2 agent claimed all conversation pipeline components and documented what it needs from other subsystems |
