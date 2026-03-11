@@ -6,13 +6,13 @@
 | **Name** | Volume 8: API & Infrastructure |
 | **Purpose** | Design specification for the server, routing, middleware, error handling, configuration, startup, and concurrency model |
 | **Owner** | Design Bible / Volume 8 |
-|| **Status** | `active` (Phase 1 complete — B.1-B.4 filled by distillation agent) |
+|| **Status** | `complete` (Phase 1 + Phase 2 — all sections filled, scorecard 42/45 PASS) |
 | **Supersedes** | N/A |
 | **Superseded by** | N/A |
 || **Author** | Oz (Part A) / Distillation Agent V8 (Part B) |
-|| **Version** | v5 |
+|| **Version** | v6 |
 | **Created** | 2026-03-10 |
-| **Last Modified** | 2026-03-10 |
+| **Last Modified** | 2026-03-11 |
 
 ---
 
@@ -413,31 +413,227 @@ Verdict for every file listed in A.2. REBUILD = needed in Atlas v4. DEFER = usef
 The rebuild starts with 3 files: `server.py`, `middleware.py`, `routes/health.py` (Tier 1), then adds `routes/chat.py` (Tier 2). The remaining DEFER files are added as their owning subsystems come online.
 
 ### B.5 Technology Choices
-*[To be filled by distillation agent]*
+
+**Framework: FastAPI (keep)** — Native async, OpenAPI docs, Pydantic validation (P8), DI, SSE/WS. No change from Attempt 3. The rebuild changes how FastAPI is used, not which framework.
+
+**HTTP server: Uvicorn (keep)** — Standard ASGI server. Single-worker dev, multi-worker via Gunicorn for production.
+
+**Configuration: pydantic-settings (change from YAML)** — Attempt 3 mixed `config.yaml`, `dotenv`, and hardcoded defaults. Rebuild uses `pydantic-settings` exclusively: env vars with `ATLAS_` prefix, optional `.env`, no YAML. Eliminates A.4 item 5. Per PROJECT_CONVENTIONS.md Section 8.
+
+**Logging: structlog (change from loguru)** — Structured JSON logging per PROJECT_CONVENTIONS.md Section 7. Machine-parsable. Migration: `logger.info("message")` → `log.info("event_name", key=value)`.
+
+**Database access: aiosqlite (change from raw sqlite3)** — Addresses A.4 item 4. `aiosqlite` or `asyncio.to_thread()` for sync drivers. Never raw `sqlite3.connect()` on the event loop. SQLite remains the storage engine per Volume 1.
+
+**CORS: CORSMiddleware (keep, restrict)** — Attempt 3 uses `allow_origins=["*"]`. Rebuild defaults to `["http://localhost:3000"]`. Production must explicitly set `ATLAS_CORS_ORIGINS`.
+
+**HTTP client: httpx (keep)** — Async HTTP client for outbound API calls (ElevenLabs STT, OpenAI Realtime proxying).
+
+**TypeScript codegen: datamodel-code-generator or pydantic2ts (new)** — Per C-11 and PROJECT_CONVENTIONS.md Section 1. Vol 8 owns `contracts/generate_ts_types.py`. Reads Pydantic models from `contracts/api_schemas.py`, outputs TS interfaces for Console.
 
 ### B.6 Data Model
-*[To be filled by distillation agent]*
+
+Vol 8 owns the HTTP-boundary Pydantic schemas in `contracts/api_schemas.py`. These cross the API↔Console boundary. Internal schemas owned by respective volumes.
+
+**ChatRequest** (`contracts/api_schemas.py`)
+- `query: str` — `Field(..., min_length=1, max_length=10000)`. Field name is `query` per C-17.
+- `session_id: str | None = None` — Optional session.
+- `context: str | None = None` — Optional additional context.
+- `stream: bool = False` — If true, response is SSE per C-12. Single endpoint, no separate `/stream` path.
+- `model_config = {"frozen": True}`
+
+**ChatResponse** (`contracts/api_schemas.py`)
+- `answer: str` — Maps from `ConversationResponse.response` (Vol 2) per C-13.
+- `session_id: str`
+- `evidence: list[EvidenceRef] = []` — Maps from `ConversationResponse.evidence_refs`.
+- `tool_calls: list[ToolCallSummary] | None = None`
+- `governed: bool = True` — Whether response passed output governance (Vol 9).
+- `metadata: dict[str, Any] = {}`
+- `model_config = {"frozen": True}`
+
+**EvidenceRef** — `source: str`, `content_snippet: str`, `confidence: float = Field(ge=0.0, le=1.0)`
+
+**ToolCallSummary** — `tool: str`, `status: Literal["success", "failed", "skipped"]`, `result_summary: str | None = None`
+
+**ErrorResponse** — `error: str` (ErrorCategory), `detail: str`, `type: str` (exception class), `path: str`, `severity: str | None`, `request_id: str | None`
+
+**HealthResponse** — `status: Literal["healthy", "degraded", "unhealthy"]`, `service: str = "atlas-api"`, `version: str`, `subsystems: dict[str, SubsystemStatus]`, `uptime_seconds: float`
+
+**SubsystemStatus** — `initialized: bool`, `healthy: bool`, `status: Literal["ok", "degraded", "error", "stub", "disabled"]`, `detail: str | None`
+
+**SSE StreamEvent** — `type: Literal["THINKING", "TOOL_CALL", "TOOL_RESULT", "CHUNK", "DONE", "ERROR"]`, `content: str`, `metadata: dict[str, Any] = {}`
+
+These schemas are the single source of truth for both backend and Console frontend (via TS codegen).
+
+**Mapping responsibility:** Route handler in `api/routes/chat.py` maps `ConversationResponse` (Vol 2) → `ChatResponse` (Vol 8). Field renames: `response` → `answer`, `evidence_refs` → `evidence`.
 
 ### B.7 Error Handling
-*[To be filled by distillation agent]*
+
+**Error hierarchy** (location: `atlas/shared/errors.py`, owned by Vol 8)
+
+```
+AtlasError(Exception)
+├── ValidationError          — Pydantic/business rule validation failures
+├── MemoryLayerError         — Memory layer operation failures
+├── GovernanceViolation      — Constitutional/governance rule violations
+├── IntentParsingError       — Intent extraction failures
+├── LLMProviderError         — LLM API call failures (graceful degradation per R6)
+├── ToolExecutionError       — Tool invocation failures
+├── SandboxError             — Sandbox execution failures
+└── ConfigurationError       — Invalid/missing configuration
+```
+
+**AtlasError base class:** `category: ErrorCategory` (CRITICAL/OPERATIONAL/LEARNING), `severity: ErrorSeverity` (FATAL/HIGH/MEDIUM/LOW), `context: dict[str, Any]` (never empty), `should_route_to_learning: bool`, `timestamp: datetime`.
+
+Validated by Attempt 3's `src/errors.py` which has the same `ErrorCategory`/`ErrorSeverity`/`ATLASException` structure. Rebuild simplifies: 8 classes per PROJECT_CONVENTIONS.md Section 6 (drops 6 specialized subclasses from Attempt 3).
+
+**HTTP status mapping** (in `ExceptionHandlerMiddleware`):
+- `CRITICAL` → 503, `OPERATIONAL` → 500, `LEARNING` → 500
+- `ValidationError` → 400 (override: client error)
+- Bare `Exception` → wrapped in `AtlasError` OPERATIONAL, 500
+- `asyncio.TimeoutError` → 504 (via `TimeoutMiddleware`)
+- 404 returned by route handlers directly
+
+**Error propagation:** Exception raised → `ExceptionHandlerMiddleware` catches → maps to `ErrorResponse` JSON → logs with `structlog` → if `should_route_to_learning`, fires `asyncio.create_task()` for L3 storage (non-blocking) → response returned.
+
+**Forbidden patterns (P5):** `except: pass`, `except Exception: pass`, `raise Exception(...)`, HTTP 200 with error body.
 
 ### B.8 Testing Strategy
-*[To be filled by distillation agent]*
+
+**Acceptance tests (gate everything per P11):**
+1. **AT-API-01:** Server boots, `GET /health` returns 200, `status` is `"healthy"` or `"degraded"`, `subsystems` present, < 3s. Gates Tier 1.
+2. **AT-API-02:** `POST /v1/atlas/chat` with `{"query": "hello"}`, response has `answer` (non-empty), `session_id`, `governed`. < 5s. Gates Tier 2.
+3. **AT-API-03:** Empty query → 422. Malformed JSON → 400. All errors match `ErrorResponse`.
+4. **AT-API-04:** `{"query": "hello", "stream": true}` returns SSE with at least `CHUNK` + `DONE` events matching `StreamEvent`.
+5. **AT-API-05:** Disabled subsystem reports `status="disabled"`, stub reports `status="stub"` (R5).
+
+**Integration tests:**
+1. **IT-API-01:** Middleware ordering verified via log output.
+2. **IT-API-02:** Request beyond timeout → 504 + cancelled.
+3. **IT-API-03:** Learning-category error stored in L3 within 5s (real DB).
+4. **IT-API-04:** `ATLAS_PORT=9999` loaded by `AtlasConfig`.
+5. **IT-API-05:** `ConversationResponse` → `ChatResponse` mapping verified (`response`→`answer`, `evidence_refs`→`evidence`).
+
+**Unit tests:**
+1. `test_error_hierarchy` — 8 subclasses have correct defaults.
+2. `test_error_response_schema` — Serialization round-trip.
+3. `test_config_defaults` — port=8000, host=127.0.0.1, flags=False.
+4. `test_config_env_prefix` — `ATLAS_` prefix loads.
+5. `test_health_response_schema` — Schema validation.
+6. `test_chat_request_validation` — Rejects empty, accepts valid, max_length=10000.
+7. `test_stream_event_schema` — All 6 event types.
+8. `test_exception_handler_maps_atlas_error` — Category→status mapping.
+9. `test_exception_handler_wraps_bare` — Bare Exception → OPERATIONAL.
+10. `test_timeout_per_path_overrides` — `/v1/atlas/chat` gets longer timeout.
+
+**Regression tests:**
+1. **REG-01:** Server starts < 3s (A.4 item 3).
+2. **REG-02:** `create_app()` callable multiple times without state leaks (eliminates global singletons).
+3. **REG-03:** `AtlasConfig().cors_origins` does not contain `"*"` (A.4 item 6).
 
 ### B.9 Configuration
-*[To be filled by distillation agent]*
+
+**Schema** (`atlas/shared/config.py`):
+```
+class AtlasConfig(BaseSettings):
+    host: str = "127.0.0.1"
+    port: int = 8000
+    log_level: str = "info"
+    cors_origins: list[str] = ["http://localhost:3000"]
+    request_timeout: float = 60.0
+    timeout_overrides: dict[str, float] = {}
+    openai_api_key: str = ""
+    anthropic_api_key: str = ""
+    default_llm_provider: str = "openai"
+    enable_voice: bool = False
+    enable_learning: bool = False
+    enable_self_modify: bool = False
+    model_config = SettingsConfigDict(env_prefix="ATLAS_", env_file=".env", env_file_encoding="utf-8")
+```
+
+**Loading:** Instantiated once in `create_app()`, passed via DI. `get_config()` returns the factory instance.
+
+**Env vars:** `ATLAS_` prefix. Pydantic-settings handles type coercion.
+
+**Feature flags:** Default OFF. ON requires passing acceptance test. `.env.example` documents all vars.
+
+**Timeout overrides:** Dict mapping path prefixes to seconds, e.g. `{"POST /v1/atlas/chat": 120.0}`. `TimeoutMiddleware` checks before `request_timeout` fallback.
+
+**Not configurable (by design):** `/v1/` prefix, error response schema, middleware ordering, `/health` path.
 
 ### B.10 Subsystem Lessons Learned
-*[To be filled by distillation agent]*
+
+1. **server.py god object (2600+ lines)** — Mixes app creation, lifecycle, 18 inline handlers, 5 global singletons, background tasks, static files, middleware config. A1 anti-pattern. Rebuild separates: factory, lifecycle, routes, config, errors. Target: <200 lines.
+
+2. **Endpoint duplication** — Sandbox endpoints defined in server.py (1182-1430) AND routes/sandbox.py AND routes/console.py. Three implementations, inconsistent. Rebuild: one route per path, one model per concept.
+
+3. **Voice endpoints leaked into API infra** — 450+ lines of WebRTC/TTS/STT/voiceprint in server.py. Vol 6 concerns. Rebuild: `api/routes/voice.py`, registered only when `enable_voice=True`.
+
+4. **Global singletons break test isolation** — 5 module-level globals with lazy init. Tests get stale state. Rebuild: state in `app.state` via lifespan context manager. `create_app()` returns fresh state.
+
+5. **81 endpoints, no API surface management** — 17 `app.include_router()` calls, no docs on MVA-critical vs. stubs. Rebuild: explicit tags, route modules registered only with healthy backing subsystem.
+
+6. **CORS wildcard** — `allow_origins=["*"]` with unacted "configure for production" comment. Rebuild defaults to `["http://localhost:3000"]`.
+
+7. **Unsupervised background tasks** — 5+ `asyncio.create_task()` at startup, failures logged but not surfaced to `/health`. Rebuild: tracked tasks, `/health` degrades to `"degraded"` on failure.
 
 ### B.11 Discoveries
-*[To be filled by distillation agent]*
+
+1. **Middleware stack is well-designed — preserve structure** — `RequestLogging` → `Timeout` → `ExceptionHandler` from `src/api/middleware.py` is sound. ExceptionHandler classifies ATLASException vs. bare Exception, routes learning errors to L3, maps category→HTTP status. Rebuild changes: structlog, configurable timeouts, remove SubsystemHealth circuit breaker.
+
+2. **Error taxonomy structurally correct but over-specified** — `ATLASException` → `ErrorCategory` → `ErrorSeverity` → `should_route_to_learning` is exactly right. `to_episode_dict()` and `route_exception_to_memory()` demonstrate correct error↔memory integration. Rebuild: 8 subclasses (not 13).
+
+3. **Risk: single-endpoint streaming (C-12)** — Merging `/v1/atlas/chat` (JSON) and `/v1/atlas/chat/stream` (SSE) into one endpoint with `stream: bool`. Route handler checks field, returns `JSONResponse` or `StreamingResponse`. AT-API-04 covers this.
+
+4. **Risk: aiosqlite migration** — Raw `sqlite3.connect()` in route handlers (atlas_chat.py:356). Every call must go through async wrapper. Vol 1 owns SQLite access layer; Vol 8 ensures no route handler touches connections directly.
+
+5. **DI pattern: use FastAPI `Depends()` not `init_*_routes()` globals** — Attempt 3 uses `_get_atlas: Optional[Callable]` module globals. Rebuild: `Depends()` mechanism, `app.dependency_overrides` for tests.
 
 ### B.12 Oversight Self-Review
-*[To be filled by distillation agent — MANDATORY before submission]*
+
+**Q1: Does this design address every A.4 item?**
+- **A.4-1 (81 endpoints):** B.4 triage: 5 REBUILD, 10 DEFER, 25 KILL. Starts with 2 route files.
+- **A.4-2 (Error taxonomy):** B.7: 8-class hierarchy, HTTP mapping, forbidden patterns.
+- **A.4-3 (Startup order):** B.2: `create_app()` factory + lifespan. Supervised startup. No singletons.
+- **A.4-4 (Concurrency):** B.2 + B.5: async handlers, aiosqlite, `asyncio.wait_for()`. No raw sqlite3.
+- **A.4-5 (Configuration):** B.9: pydantic-settings, `ATLAS_` prefix, typed+validated. No YAML.
+
+**Q2: Shared contracts respected?**
+- Section 1.3 schemas: all in B.6. ChatRequest includes `stream: bool` per C-12.
+- Section 2.1 (Vol 8→Vol 2): `ConversationEngine.process_message()` consumed, mapping in B.6.
+- Section 2.14 (Vol 7→Vol 8): SSE via single chat endpoint per C-12.
+- Section 5.1/5.2: error hierarchy and config match exactly.
+
+**Q3: Anti-patterns avoided?**
+- A1: Routes registered only with backing subsystem. A2: Health verifies actual functionality (R5). A3: No fake reports. A4: Exception handlers log, `except: pass` forbidden. A5: 3 files Tier 1, 4 Tier 2. A7: No TODOs. A8: Acceptance tests hit live server.
+
+**Q4: Interface mismatches?**
+- Vol 2: `process_message(message, session_id, device_id)` — `ChatRequest.query`→`message`, `session_id`→`session_id`, `device_id="api"`. No mismatch.
+- Vol 7: `/v1/*` per C-10, SSE per C-12, TS types per C-11. No mismatch.
+- Vol 9: `ChatResponse.governed` + `evidence` from `AnswerGovernor` via Vol 2. No mismatch.
+- Vol 1: `MemoryManager.get_stats()` for health. No mismatch.
+
+**Q5: Missing for coding agent?**
+- WebSocket telemetry: deferred to Tier 4+.
+- Session CRUD: deferred to Tier 6+.
+- Memory admin endpoints: deferred.
+- HTTPS/TLS: reverse proxy concern, not application.
+
+**Q6: B.4 verdicts still correct?**
+All stand. server.py REBUILD, middleware.py REBUILD, telemetry DEFER, 25 KILL confirmed, 10 DEFER confirmed.
 
 ### B.13 Design Quality Scorecard
-*[To be filled by distillation agent — MANDATORY. Minimum passing score: 30/45]*
+
+1. **Volume 0 Compliance** — **5/5**. P2 graduated registration. P3 endpoints require AT. P5 error logging. P8 Pydantic schemas. P11 five ATs.
+2. **Interface Completeness** — **5/5**. 8 contracts in B.3, all schemas in B.6 with field types.
+3. **Anti-Pattern Avoidance** — **5/5**. A1-A8 addressed in B.12 Q3. Minimal start.
+4. **Testability** — **4/5**. 5 AT, 5 IT, 10 UT, 3 REG with inputs/outputs. Deduction: WS telemetry deferred.
+5. **Shared Contract Conformance** — **5/5**. All Section 1.3 schemas. C-10 through C-17 incorporated.
+6. **Scope Discipline** — **5/5**. 5/40 REBUILD, 25 KILL (62.5% reduction). MVA: 3→4 files.
+7. **Specificity** — **4/5**. Schemas, errors, middleware, config, mapping specified. Deduction: WS protocol deferred.
+8. **Lessons Integration** — **5/5**. 7 lessons with code refs. REG-01–REG-03 prevent recurrence.
+9. **Documentation Quality** — **4/5**. All sections filled, cross-referenced. Deduction: verbose due to schema count.
+
+**Total: 42/45** (minimum: 30/45) — **PASS**
 
 ---
 
@@ -450,3 +646,4 @@ The rebuild starts with 3 files: `server.py`, `middleware.py`, `routes/health.py
 | v3 | 2026-03-10 | Oz | Added Doc ID field (`DB-V08-001`) per PROJECT_CONVENTIONS.md Section 9.4 | Added unique document number for machine searching |
 || v4 | 2026-03-10 | Oz | Added CORE/PERIPHERAL classification to A.2 Source Manifest per DISTILLATION_PROTOCOL.md Section 5 | Labeled which files agents should read in full vs. skim during Phase 1 |
 || v5 | 2026-03-10 | Distillation Agent V8 | Phase 1: Filled B.1 (Subsystem Purpose), B.2 (Architecture Overview with 5 components + data flow + concurrency model), B.3 (8 interface contracts: server factory, health, chat, streaming, errors, middleware, config, route pattern), B.4 (Scope Triage: 5 REBUILD, 10 DEFER, 25 KILL across 40 files) | Wrote the design spec for the rebuilt API server — what endpoints to keep, what to kill, and exactly how they should work |
+|| v6 | 2026-03-11 | Distillation Agent V8 | Phase 2: Filled B.5-B.13 (Technology Choices, Data Model, Error Handling, Testing Strategy, Configuration, Lessons Learned, Discoveries, Oversight Self-Review, Scorecard 42/45 PASS) | Deep-dived into source files and completed the detailed technical spec with schemas, error taxonomy, test plans, and design verification |
